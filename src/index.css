@@ -1,0 +1,491 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --academy-gold: #C9A227;
+    --academy-gold-dark: #A67C00;
+    --academy-navy: #0B2748;
+    --academy-navy-alt: #12395B;
+    --academy-ivory: #FAF7EF;
+    --academy-white: #FFFFFF;
+    --academy-gray: #F2F3F5;
+    --academy-green: #147A4A;
+    --academy-red: #B4232C;
+  }
+
+  body {
+    font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #FAF7EF;
+    color: #0B2748;
+    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Root dark mode canvas and text */
+  html.dark body {
+    background-color: #0B2748 !important;
+    color: #FAF7EF !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Subtle Visual Refinement Utilities: Shadows, Borders & Glows               */
+/* -------------------------------------------------------------------------- */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+html.dark .glass-panel {
+  background: rgba(18, 30, 49, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.card-elevated {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+.card-elevated:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(12, 35, 64, 0.08), 0 8px 10px -6px rgba(12, 35, 64, 0.04);
+}
+html.dark .card-elevated:hover {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.45), 0 8px 10px -6px rgba(0, 109, 119, 0.15);
+}
+
+/* Polished scrollbars for light and dark modes */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Official Institutional Dark Theme: Deep Midnight Navy & UAE Gold Accents   */
+/* -------------------------------------------------------------------------- */
+
+/* Cards, Modals, and Main Containers */
+html.dark .bg-white {
+  background-color: #121e31;
+  color: #f1f5f9;
+  border-color: #1e2e45;
+}
+
+/* Light gray backgrounds used for pages, secondary boxes and wells */
+html.dark .bg-slate-100 {
+  background-color: #0b1320;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #0e1726;
+  border-color: #1e2e45;
+}
+
+/* Light teal, amber, rose, and blue tinted backgrounds */
+html.dark .bg-teal-50,
+html.dark .bg-teal-50\/50,
+html.dark .bg-teal-50\/70 {
+  background-color: rgba(0, 109, 119, 0.15);
+  border-color: rgba(20, 184, 166, 0.3);
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/40,
+html.dark .bg-amber-50\/50,
+html.dark .bg-amber-50\/60 {
+  background-color: rgba(212, 175, 55, 0.12);
+  border-color: rgba(212, 175, 55, 0.35);
+}
+
+html.dark .bg-rose-50,
+html.dark .bg-rose-50\/50 {
+  background-color: rgba(225, 29, 72, 0.14);
+  border-color: rgba(225, 29, 72, 0.35);
+}
+
+html.dark .bg-blue-50,
+html.dark .bg-blue-50\/50 {
+  background-color: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+html.dark .bg-indigo-50,
+html.dark .bg-indigo-50\/50 {
+  background-color: rgba(99, 102, 241, 0.14);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/50 {
+  background-color: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+html.dark .bg-slate-200 {
+  background-color: #1e2e45;
+  border-color: #2b3f5c;
+}
+
+/* Borders */
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/90,
+html.dark .border-slate-300 {
+  border-color: #1e2e45;
+}
+
+/* Text Colors Hierarchy */
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f8fafc;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #94a3b8;
+}
+
+/* Status text contrast in dark mode */
+html.dark .text-teal-700,
+html.dark .text-teal-800 {
+  color: #2dd4bf;
+}
+
+html.dark .text-indigo-700,
+html.dark .text-indigo-800 {
+  color: #a5b4fc;
+}
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 {
+  color: #6ee7b7;
+}
+
+html.dark .text-blue-700,
+html.dark .text-blue-800,
+html.dark .text-blue-900 {
+  color: #7dd3fc;
+}
+
+html.dark .text-amber-700,
+html.dark .text-amber-800,
+html.dark .text-amber-900 {
+  color: #fcd34d;
+}
+
+html.dark .text-rose-700,
+html.dark .text-rose-800 {
+  color: #fda4af;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Official Printable Form Document Previews (Screen Preview in Dark Mode)   */
+/* -------------------------------------------------------------------------- */
+html.dark [id*="printable"],
+html.dark [id^="printable-"],
+html.dark .printable-sheet,
+html.dark .printable-document {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.dark [id*="printable"] *,
+html.dark [id^="printable-"] *,
+html.dark .printable-sheet *,
+html.dark .printable-document * {
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+html.dark [id*="printable"] input,
+html.dark [id*="printable"] select,
+html.dark [id*="printable"] textarea,
+html.dark [id^="printable-"] input,
+html.dark [id^="printable-"] select,
+html.dark [id^="printable-"] textarea,
+html.dark .printable-sheet input,
+html.dark .printable-sheet select,
+html.dark .printable-sheet textarea {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+/* Maintain dark fills for headers or badges explicitly styled as black inside printable documents */
+html.dark [id*="printable"] .bg-black,
+html.dark [id*="printable"] tr.bg-black,
+html.dark [id^="printable-"] .bg-black,
+html.dark [id^="printable-"] tr.bg-black {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+html.dark [id*="printable"] .bg-black *,
+html.dark [id*="printable"] tr.bg-black *,
+html.dark [id^="printable-"] .bg-black *,
+html.dark [id^="printable-"] tr.bg-black * {
+  color: #ffffff !important;
+}
+
+/* Keep signature drawing pad light so navy ink remains high contrast */
+html.dark canvas,
+html.dark [id^="canvas-"],
+html.dark img.signature-preview {
+  background-color: #ffffff !important;
+}
+
+/* Form Controls: Inputs, Selects, and Textareas */
+html.dark input[type="text"],
+html.dark input[type="date"],
+html.dark input[type="password"],
+html.dark input[type="email"],
+html.dark input[type="number"],
+html.dark input[type="search"],
+html.dark select,
+html.dark textarea {
+  background-color: #0d1726 !important;
+  color: #f8fafc !important;
+  border-color: #243650 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark input:disabled,
+html.dark select:disabled,
+html.dark textarea:disabled {
+  background-color: #080f1a !important;
+  color: #64748b !important;
+  border-color: #1b283d !important;
+}
+
+/* Table Hover & Stripe Rows */
+html.dark tr:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover {
+  background-color: #18283f !important;
+}
+
+html.dark .hover\:bg-slate-200:hover {
+  background-color: #223552 !important;
+}
+
+/* Dark Mode Scrollbars */
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0b1320;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #1e2e45;
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #2b3f5c;
+}
+
+/* -------------------------------------------------------------------------- */
+/* PRINT MEDIA RULES: ALWAYS PURE WHITE BACKGROUND & CRISP BLACK TEXT         */
+/* ENSURES PRINTING IS 100% ISOLATED TO THE FORM ONLY WITHOUT SURROUNDING UI   */
+/* -------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4 portrait !important;
+    margin: 0 !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: hidden !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Universal print exclusion for non-printable UI elements */
+  .no-print,
+  #app-header,
+  header,
+  #desktop-sidebar,
+  aside,
+  nav,
+  footer,
+  #btn-toggle-mobile-sidebar,
+  #btn-toggle-sidebar,
+  .toast-container,
+  [role="tooltip"],
+  .modal-backdrop-blur {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .print-only {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* When an official printable form is open:
+     Completely suppress #root and any background app page elements */
+  body.print-form-active > #root,
+  body.print-modal-open > #root {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Printable Portal Modal Container: occupies clean full page flow */
+  .print-modal-portal {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Inner Sheet Scaling Reset: overrides any interactive UI zoom */
+  .print-unscaled-container {
+    transform: none !important;
+    transform-origin: 0 0 !important;
+    margin: 0 !important;
+    margin-bottom: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* Outer card resets to zero margins and full printable area */
+  .print-sheet-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure official printable forms print cleanly with exact black text */
+  [id*="printable"],
+  [id^="printable-"],
+  .printable-sheet,
+  .printable-document {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+    page-break-inside: auto;
+  }
+
+  /* Official Violation Report (نموذج رقم 6): Strictly single-page A4 Portrait */
+  #printable-violation-report-official {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    height: 297mm !important;
+    box-sizing: border-box !important;
+    padding: 8mm 14mm 8mm 14mm !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    overflow: hidden !important;
+  }
+
+  /* Reset any dark styles on paper print to clean white and black */
+  html.dark,
+  html.dark body,
+  html.dark .bg-white,
+  html.dark [id*="printable"],
+  html.dark [id^="printable-"],
+  html.dark .printable-sheet,
+  html.dark .printable-document {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #000000 !important;
+  }
+
+  html.dark input,
+  html.dark select,
+  html.dark textarea {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #000000 !important;
+  }
+
+  /* Prevent awkward page breaks across signature areas, tables and headers */
+  table,
+  tr,
+  td,
+  th {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .signature-box,
+  .print-break-inside-avoid,
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+

@@ -1,0 +1,6 @@
+{
+  "summary":  "خطة استبدال القوائم الثابتة في صفحة الطلاب (StudentsPage) بـ useMemo يعتمد على بيانات الطلاب لاستخراج الفلاتر ديناميكياً وفق التجميع الثلاثي (Grade + Track + Section).",
+  "updatedAt":  "2026-10-01T13:48:15.170648317Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

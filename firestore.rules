@@ -1,0 +1,352 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isUserActive() {
+      return isSignedIn() && (
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        (hasUserDoc() && getUserData().active == true)
+      );
+    }
+
+    function getUserRole() {
+      return hasUserDoc() ? getUserData().role : '';
+    }
+
+    function getUserSchoolId() {
+      return hasUserDoc() ? getUserData().schoolId : '7001';
+    }
+
+    function isSystemOwner() {
+      return isSignedIn() && (
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        (isUserActive() && (getUserRole() == 'system_owner' || getUserRole() == 'systemAdmin'))
+      );
+    }
+
+    function isSystemAdmin() {
+      return isSystemOwner();
+    }
+
+    function isKnownSchool(schoolId) {
+      return schoolId == '7001' || schoolId == 'alkhalil-school' || schoolId == 'school-main';
+    }
+
+    function isSchoolMember(schoolId) {
+      return getUserSchoolId() == schoolId || (isKnownSchool(getUserSchoolId()) && isKnownSchool(schoolId));
+    }
+
+    function isSchoolAdmin(schoolId) {
+      return isUserActive() && (
+        isSystemOwner() ||
+        ((getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin') && isSchoolMember(schoolId))
+      );
+    }
+
+    function isCounselor(schoolId) {
+      return isUserActive() && (
+        isSchoolAdmin(schoolId) ||
+        (getUserRole() == 'counselor' && isSchoolMember(schoolId))
+      );
+    }
+
+    function canReadSchool(schoolId) {
+      return isUserActive() && (
+        isSystemOwner() ||
+        isSchoolMember(schoolId)
+      );
+    }
+
+    // --------------------------------------------------------------------------
+    // Users collection rules
+    // --------------------------------------------------------------------------
+    match /users/{userId} {
+      // Any authenticated user can read their own profile; system_owner can read all; school_admin can read users in their school
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin') && isSchoolMember(resource.data.schoolId))
+      );
+
+      // System owner can create any user; user can create their own profile; school admins can create users for their school
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId ||
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin') &&
+         isSchoolMember(request.resource.data.schoolId) &&
+         request.resource.data.role != 'systemAdmin' &&
+         request.resource.data.role != 'system_owner')
+      );
+
+      // System owner can update any user; school admins can update users in their school
+      allow update: if isSignedIn() && (
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin') &&
+         isSchoolMember(resource.data.schoolId) &&
+         request.resource.data.role != 'systemAdmin' &&
+         request.resource.data.role != 'system_owner') ||
+        (request.auth.uid == userId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLoginAt', 'photoURL', 'fullName', 'phone', 'jobTitle']))
+      );
+
+      // Only system owner can delete users
+      allow delete: if isSystemOwner();
+    }
+
+    // --------------------------------------------------------------------------
+    // Schools top-level and subcollections
+    // --------------------------------------------------------------------------
+    match /schools/{schoolId} {
+      // Authenticated users can get their own school or known single-school IDs; system_owner can list all schools
+      allow get: if isSignedIn() && (
+        isSystemOwner() ||
+        isSchoolMember(schoolId) ||
+        isKnownSchool(schoolId)
+      );
+      allow list: if isSystemOwner();
+
+      // New school request creation: authenticated user can submit a pending school request
+      allow create: if isSignedIn() && (
+        isSystemOwner() ||
+        (request.resource.data.status == 'pending' && request.resource.data.createdBy == request.auth.uid)
+      );
+
+      // Modifying or archiving school records: strictly restricted to system_owner
+      allow update, delete: if isSystemOwner();
+
+      // Students
+      match /students/{studentId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update, delete: if isCounselor(schoolId);
+      }
+
+      // Morning Delays
+      match /morningDelays/{delayId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Absences (الغياب والحضور)
+      match /absences/{absenceId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Violations
+      match /violations/{violationId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Warning Forms (Model 9)
+      match /warningForms/{formId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Parent Summon Forms (Model 8)
+      match /parentSummonForms/{formId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Violation Reports & Behavior Forms (Model 6: تقرير مخالفة, Model 12: إيقاف مؤقت)
+      match /behaviorForms/{formId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId) && resource.data.status != 'معتمد';
+      }
+
+      // Unified Official Documents & E-Signatures (وحدة النماذج والتوقيعات الرسمية المعتمدة)
+      match /officialDocuments/{docId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId) && resource.data.status != 'approved';
+      }
+
+      // Committee Meetings & Sessions (اجتماعات وقرارات لجنة إدارة السلوك)
+      match /committeeMeetings/{meetingId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+      match /meetings/{meetingId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Staff & Employees (سجل الموظفين والكادر المدرسي)
+      match /staff_members/{staffId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Committee Formation (تشكيل لجنة إدارة السلوك)
+      match /committee_formation/{formationId} {
+        allow read: if canReadSchool(schoolId);
+        allow write: if isCounselor(schoolId);
+      }
+
+      // Signatures
+      match /signatures/{signatureId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Imports
+      match /imports/{importId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Audit Logs: strict rules - no update, no delete!
+      match /auditLogs/{logId} {
+        allow read: if isSchoolAdmin(schoolId) || isSystemAdmin();
+        allow create: if isUserActive() && (isSystemAdmin() || isSchoolMember(schoolId));
+        allow update, delete: if false; // Strict immutability
+      }
+
+      // Settings
+      match /settings/{settingId} {
+        allow read: if canReadSchool(schoolId);
+        allow write: if isSchoolAdmin(schoolId);
+      }
+
+      // Message Templates
+      match /messageTemplates/{templateId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Message Drafts
+      match /messageDrafts/{draftId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update, delete: if isCounselor(schoolId);
+      }
+
+      // Message Logs
+      match /messageLogs/{logId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update: if isCounselor(schoolId);
+        allow delete: if isSchoolAdmin(schoolId);
+      }
+
+      // Message Queues
+      match /messageQueues/{queueId} {
+        allow read: if canReadSchool(schoolId);
+        allow create, update, delete: if isCounselor(schoolId);
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // Registration Requests collection
+    // --------------------------------------------------------------------------
+    match /registrationRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == requestId ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin'))
+      );
+
+      allow create: if isSignedIn() && request.auth.uid == requestId;
+
+      allow update: if isSignedIn() && (
+        (request.auth.uid == requestId && resource.data.status != 'approved') ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin'))
+      );
+
+      allow delete: if isSystemOwner();
+    }
+
+    // --------------------------------------------------------------------------
+    // Settings root-level collection rules (e.g. settings/school_info)
+    // --------------------------------------------------------------------------
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        request.auth.token.email == 'ameer2020vip@gmail.com' ||
+        isSystemOwner() ||
+        (isUserActive() && (getUserRole() == 'school_admin' || getUserRole() == 'schoolAdmin'))
+      );
+    }
+
+    // --------------------------------------------------------------------------
+    // Student Cases and Forms (إدارة الحالات والإرشاد)
+    // --------------------------------------------------------------------------
+    match /studentCases/{caseId} {
+      allow read: if isSignedIn() && (
+        isSystemAdmin() ||
+        (isUserActive() && isSchoolMember(resource.data.schoolId))
+      );
+      allow create: if isSignedIn() && (
+        isSystemAdmin() ||
+        isCounselor(request.resource.data.schoolId)
+      );
+      allow update: if isSignedIn() && (
+        isSystemAdmin() ||
+        (isCounselor(resource.data.schoolId) && request.resource.data.schoolId == resource.data.schoolId)
+      );
+      allow delete: if isSystemAdmin();
+
+      match /forms/{formId} {
+        allow read: if isSignedIn() && (
+          isSystemAdmin() ||
+          (isUserActive() && isSchoolMember(resource.data.schoolId))
+        );
+        allow create: if isSignedIn() && (
+          isSystemAdmin() ||
+          isCounselor(request.resource.data.schoolId)
+        );
+        allow update: if isSignedIn() && (
+          isSystemAdmin() ||
+          (isCounselor(resource.data.schoolId) && request.resource.data.schoolId == resource.data.schoolId)
+        );
+        allow delete: if isSystemAdmin();
+      }
+
+      match /counselingSessions/{sessionId} {
+        allow read: if isSignedIn() && (
+          isSystemAdmin() ||
+          (isUserActive() && isSchoolMember(resource.data.schoolId))
+        );
+        allow create: if isSignedIn() && (
+          isSystemAdmin() ||
+          isCounselor(request.resource.data.schoolId)
+        );
+        allow update: if isSignedIn() && (
+          isSystemAdmin() ||
+          (isCounselor(resource.data.schoolId) && request.resource.data.schoolId == resource.data.schoolId)
+        );
+        allow delete: if isSystemAdmin();
+      }
+    }
+  }
+}

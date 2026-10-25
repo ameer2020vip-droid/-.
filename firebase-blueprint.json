@@ -1,0 +1,329 @@
+{
+  "$schema": "https://firebase.google.com/schemas/firestore/blueprint/v1.json",
+  "entities": {
+    "User": {
+      "collection": "users",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth User UID" },
+        "fullName": { "type": "string", "description": "Full name of the counselor or administrator" },
+        "email": { "type": "string", "description": "Official school email address" },
+        "role": { "type": "string", "enum": ["systemAdmin", "schoolAdmin", "counselor", "viewer"] },
+        "schoolId": { "type": "string", "description": "Assigned school ID, e.g. alkhalil-school" },
+        "jobTitle": { "type": "string", "description": "e.g. المرشد الأكاديمي والمهني" },
+        "active": { "type": "boolean", "description": "Whether user account is active" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "createdBy": { "type": "string", "description": "Creator user UID" },
+        "lastLoginAt": { "type": "string", "description": "ISO timestamp of last login" },
+        "photoURL": { "type": "string", "description": "Profile picture URL or Base64 data URL" },
+        "phone": { "type": "string", "description": "Contact phone or WhatsApp number" }
+      }
+    },
+    "School": {
+      "collection": "schools",
+      "fields": {
+        "schoolId": { "type": "string" },
+        "schoolNameAr": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "Student": {
+      "collection": "schools/{schoolId}/students",
+      "fields": {
+        "studentNumber": { "type": "string" },
+        "fullName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "track": { "type": "string" },
+        "status": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "parentRelation": { "type": "string" },
+        "totalTardiness": { "type": "number" },
+        "totalViolations": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "MorningDelay": {
+      "collection": "schools/{schoolId}/morningDelays",
+      "fields": {
+        "studentId": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "reason": { "type": "string" },
+        "delayCountThisYear": { "type": "number" },
+        "suggestedAction": { "type": "string" },
+        "actionStatus": { "type": "string" },
+        "counselorNotes": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "Violation": {
+      "collection": "schools/{schoolId}/violations",
+      "fields": {
+        "studentId": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "violationType": { "type": "string" },
+        "violationDegree": { "type": "string" },
+        "incidentDateTime": { "type": "string" },
+        "incidentLocation": { "type": "string" },
+        "reportingPerson": { "type": "string" },
+        "incidentDescription": { "type": "string" },
+        "suggestedAction": { "type": "string" },
+        "counselorNotes": { "type": "string" },
+        "status": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "WarningForm": {
+      "collection": "schools/{schoolId}/warningForms",
+      "fields": {
+        "studentId": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "formDate": { "type": "string" },
+        "emirate": { "type": "string" },
+        "school": { "type": "string" },
+        "priorBehavior1": { "type": "string" },
+        "priorBehavior2": { "type": "string" },
+        "priorBehavior3": { "type": "string" },
+        "studentPledge": { "type": "string" },
+        "counselorName": { "type": "string" },
+        "actionTaken": { "type": "string" },
+        "studentSignature": { "type": "string" },
+        "studentSignatureDate": { "type": "string" },
+        "studentAttestation": { "type": "boolean" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "communicationResult": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "AuditLog": {
+      "collection": "schools/{schoolId}/auditLogs",
+      "fields": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" }
+      }
+    },
+    "RegistrationRequest": {
+      "collection": "registrationRequests",
+      "fields": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "fullNameArabic": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolNumber": { "type": "string" },
+        "schoolNameArabic": { "type": "string" },
+        "emirate": { "type": "string" },
+        "requestedJobTitle": { "type": "string" },
+        "jobTitleArabic": { "type": "string" },
+        "schoolGender": { "type": "string" },
+        "educationCycles": { "type": "array" },
+        "requestType": { "type": "string" },
+        "status": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "MessageTemplate": {
+      "collection": "schools/{schoolId}/messageTemplates",
+      "fields": {
+        "templateId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "badge": { "type": "string" },
+        "importance": { "type": "string" },
+        "colors": { "type": "object" },
+        "sections": { "type": "object" },
+        "body": { "type": "string" },
+        "variables": { "type": "array" },
+        "isActive": { "type": "boolean" },
+        "isSystemTemplate": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "MessageLog": {
+      "collection": "schools/{schoolId}/messageLogs",
+      "fields": {
+        "messageId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientRelation": { "type": "string" },
+        "recipientPhoneMasked": { "type": "string" },
+        "recipientEmailMasked": { "type": "string" },
+        "channel": { "type": "string" },
+        "status": { "type": "string" },
+        "subject": { "type": "string" },
+        "messageSnapshot": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "confirmedAt": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "MessageQueue": {
+      "collection": "schools/{schoolId}/messageQueues",
+      "fields": {
+        "queueId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "recipients": { "type": "array" },
+        "currentIndex": { "type": "number" },
+        "completedCount": { "type": "number" },
+        "skippedCount": { "type": "number" },
+        "failedCount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "StudentCase": {
+      "collection": "studentCases",
+      "fields": {
+        "schoolId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentNumber": { "type": "string" },
+        "grade": { "type": "string" },
+        "section": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "caseNumber": { "type": "string" },
+        "caseType": { "type": "string" },
+        "referralSource": { "type": "string" },
+        "referralReason": { "type": "string" },
+        "initialSummary": { "type": "string" },
+        "confidentialityLevel": { "type": "string" },
+        "status": { "type": "string" },
+        "assignedCounselorId": { "type": "string" },
+        "assignedCounselorName": { "type": "string" },
+        "openedAt": { "type": "string" },
+        "nextFollowUpAt": { "type": "string" },
+        "closedAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "StudentCaseForm": {
+      "collection": "studentCases/{caseId}/forms",
+      "fields": {
+        "schoolId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "caseId": { "type": "string" },
+        "formType": { "type": "string" },
+        "formVersion": { "type": "number" },
+        "formStatus": { "type": "string" },
+        "data": { "type": "object" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "reviewedAt": { "type": "string" }
+      }
+    },
+    "CounselingSession": {
+      "collection": "studentCases/{caseId}/counselingSessions",
+      "fields": {
+        "schoolId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "studentId": { "type": "string" },
+        "caseId": { "type": "string" },
+        "sessionNumber": { "type": "string" },
+        "sessionDate": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "sessionLocation": { "type": "string" },
+        "sessionType": { "type": "string" },
+        "counselorId": { "type": "string" },
+        "counselorName": { "type": "string" },
+        "referralSources": { "type": "array" },
+        "referralDate": { "type": "string" },
+        "referralReasonBrief": { "type": "string" },
+        "counselingAreas": { "type": "array" },
+        "sessionTitle": { "type": "string" },
+        "sessionReasons": { "type": "string" },
+        "studentStatementSummary": { "type": "string" },
+        "counselorObservations": { "type": "string" },
+        "sessionGoals": { "type": "array" },
+        "sessionProcedures": { "type": "array" },
+        "servicesProvided": { "type": "object" },
+        "miniActionPlan": { "type": "array" },
+        "guardianContact": { "type": "object" },
+        "sessionOutcome": { "type": "string" },
+        "priorityLevel": { "type": "string" },
+        "nextFollowUpAt": { "type": "string" },
+        "confidentialityLevel": { "type": "string" },
+        "formStatus": { "type": "string" },
+        "studentAcknowledgement": { "type": "object" },
+        "approval": { "type": "object" },
+        "revisions": { "type": "array" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "archivedAt": { "type": "string" }
+      }
+    },
+    "StaffMember": {
+      "collection": "schools/{schoolId}/staff_members",
+      "fields": {
+        "employeeNumber": { "type": "string" },
+        "fullName": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "department": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "isCommitteeMember": { "type": "boolean" },
+        "committeeRole": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "CommitteeFormation": {
+      "collection": "schools/{schoolId}/committee_formation",
+      "fields": {
+        "schoolId": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "members": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  }
+}

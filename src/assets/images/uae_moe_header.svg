@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 480" width="100%" height="100%">
+  <defs>
+    <!-- Falcon Realistic Gold-Brown Gradients -->
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E2C479"/>
+      <stop offset="25%" stop-color="#C29A44"/>
+      <stop offset="60%" stop-color="#8F6822"/>
+      <stop offset="100%" stop-color="#543A0C"/>
+    </linearGradient>
+
+    <linearGradient id="featherHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2DF9B"/>
+      <stop offset="50%" stop-color="#B88E3B"/>
+      <stop offset="100%" stop-color="#5E3F0E"/>
+    </linearGradient>
+
+    <linearGradient id="textGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#B1873B"/>
+      <stop offset="100%" stop-color="#8A6321"/>
+    </linearGradient>
+
+    <!-- Radial gradient for shield lighting -->
+    <radialGradient id="shieldShine" cx="35%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ======================================================== -->
+  <!-- LEFT: ENGLISH TITLE (MATCHING TITLE CASE IN USER IMAGE)  -->
+  <!-- ======================================================== -->
+  <g transform="translate(0, 0)">
+    <text x="355" y="235" font-family="'Trebuchet MS', 'Segoe UI', 'DejaVu Sans', 'Arial', sans-serif" font-weight="600" font-size="29" fill="url(#textGold)" letter-spacing="0.4" text-anchor="end">
+      United Arab Emirates
+    </text>
+    <text x="355" y="278" font-family="'Trebuchet MS', 'Segoe UI', 'DejaVu Sans', 'Arial', sans-serif" font-weight="600" font-size="29" fill="url(#textGold)" letter-spacing="0.4" text-anchor="end">
+      Ministry of Education
+    </text>
+  </g>
+
+  <!-- ======================================================== -->
+  <!-- CENTER: OFFICIAL UAE GOLDEN FALCON COAT OF ARMS          -->
+  <!-- ======================================================== -->
+  <g transform="translate(488, 235)">
+    <!-- Falcon Main Body Silhouette / Underlayer -->
+    <path d="M0 -88 C20 -88 55 -60 70 -30 C78 -10 76 25 72 65 C68 95 45 110 0 112 C-45 110 -68 95 -72 65 C-76 25 -78 -10 -70 -30 C-55 -60 -20 -88 0 -88 Z" fill="#422C08" />
+
+    <!-- Left Wings Outer Contour -->
+    <path d="M-8 -65 C-26 -60 -52 -45 -68 -15 C-76 2 -78 28 -74 60 C-68 85 -55 98 -45 105 C-36 90 -28 70 -22 45 C-18 20 -15 -20 -8 -65 Z" fill="url(#bodyGrad)" stroke="#3B2605" stroke-width="1.5" />
+    
+    <!-- Left Wing Feathers Shading -->
+    <path d="M-68 -15 C-78 5 -80 32 -74 58 C-70 42 -64 25 -55 10 Z" fill="url(#featherHighlight)" />
+    <path d="M-74 25 C-80 48 -78 72 -68 90 C-65 74 -58 58 -50 42 Z" fill="#6B4B14" />
+    <path d="M-65 50 C-72 72 -68 95 -58 108 C-56 92 -50 78 -42 62 Z" fill="#4A320A" />
+
+    <!-- Left Feather Rib Details -->
+    <line x1="-22" y1="45" x2="-62" y2="75" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="-26" y1="20" x2="-68" y2="40" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="-30" y1="-5" x2="-65" y2="10" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="-35" y1="-28" x2="-55" y2="-20" stroke="#3D2705" stroke-width="1.5"/>
+
+    <!-- Right Wings Outer Contour -->
+    <path d="M8 -65 C26 -60 52 -45 68 -15 C76 2 78 28 74 60 C68 85 55 98 45 105 C36 90 28 70 22 45 C18 20 15 -20 8 -65 Z" fill="url(#bodyGrad)" stroke="#3B2605" stroke-width="1.5" />
+    
+    <!-- Right Wing Feathers Shading -->
+    <path d="M68 -15 C78 5 80 32 74 58 C70 42 64 25 55 10 Z" fill="url(#featherHighlight)" />
+    <path d="M74 25 C80 48 78 72 68 90 C65 74 58 58 50 42 Z" fill="#6B4B14" />
+    <path d="M65 50 C72 72 68 95 58 108 C56 92 50 78 42 62 Z" fill="#4A320A" />
+
+    <!-- Right Feather Rib Details -->
+    <line x1="22" y1="45" x2="62" y2="75" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="26" y1="20" x2="68" y2="40" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="30" y1="-5" x2="65" y2="10" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="35" y1="-28" x2="55" y2="-20" stroke="#3D2705" stroke-width="1.5"/>
+
+    <!-- Tail Feathers -->
+    <path d="M-22 80 L-32 120 L-16 114 L0 125 L16 114 L32 120 L22 80 Z" fill="url(#bodyGrad)" stroke="#3B2605" stroke-width="1.5" />
+    <line x1="-16" y1="90" x2="-22" y2="114" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="0" y1="90" x2="0" y2="120" stroke="#3D2705" stroke-width="1.5"/>
+    <line x1="16" y1="90" x2="22" y2="114" stroke="#3D2705" stroke-width="1.5"/>
+
+    <!-- Falcon Head & Neck (Facing Right as in Official Seal) -->
+    <path d="M-12 -65 C-15 -78 -6 -96 4 -102 C15 -105 24 -98 25 -88 C32 -88 38 -80 34 -72 C27 -68 22 -70 18 -70 C14 -58 8 -46 0 -44 C-6 -46 -10 -54 -12 -65 Z" fill="url(#bodyGrad)" stroke="#3B2605" stroke-width="1.5" />
+    <!-- Falcon Eye -->
+    <circle cx="12" cy="-90" r="3.5" fill="#FFFFFF" stroke="#3B2605" stroke-width="1"/>
+    <circle cx="13" cy="-90" r="1.8" fill="#000000"/>
+    <!-- Falcon Sharp Beak -->
+    <path d="M24 -87 C34 -87 37 -80 32 -74 C27 -74 22 -75 20 -75 Z" fill="#3D2A08" stroke="#261A03" stroke-width="1"/>
+
+    <!-- Central Round Shield with Golden Rim -->
+    <g transform="translate(0, 16)">
+      <!-- Outer Golden Rim -->
+      <circle cx="0" cy="0" r="37" fill="#C9A34E" stroke="#523808" stroke-width="2.5" />
+      <!-- Inner Thin White Ring -->
+      <circle cx="0" cy="0" r="32" fill="#FFFFFF" stroke="#7A5612" stroke-width="1.5" />
+
+      <!-- Inside Shield Clip for UAE Flag -->
+      <clipPath id="innerShield">
+        <circle cx="0" cy="0" r="30.5"/>
+      </clipPath>
+
+      <g clip-path="url(#innerShield)">
+        <!-- Top Green Stripe -->
+        <rect x="-32" y="-32" width="64" height="21" fill="#007A3D"/>
+        <!-- Middle White Stripe -->
+        <rect x="-32" y="-11" width="64" height="22" fill="#FFFFFF"/>
+        <!-- Bottom Black Stripe -->
+        <rect x="-32" y="11" width="64" height="21" fill="#000000"/>
+        <!-- Right Red Vertical Stripe (Correct UAE Flag Orientation) -->
+        <rect x="10" y="-32" width="22" height="64" fill="#E0112B"/>
+        <!-- Subtle 3D Glass Shine -->
+        <circle cx="0" cy="0" r="30.5" fill="url(#shieldShine)"/>
+      </g>
+
+      <!-- 7 Golden Stars along Ring -->
+      <circle cx="0" cy="-28" r="1.8" fill="#523808"/>
+      <circle cx="19.5" cy="-20" r="1.8" fill="#523808"/>
+      <circle cx="28" cy="0" r="1.8" fill="#523808"/>
+      <circle cx="19.5" cy="20" r="1.8" fill="#523808"/>
+      <circle cx="-19.5" cy="-20" r="1.8" fill="#523808"/>
+      <circle cx="-28" cy="0" r="1.8" fill="#523808"/>
+      <circle cx="-19.5" cy="20" r="1.8" fill="#523808"/>
+    </g>
+
+    <!-- Falcon Golden Talons Claws -->
+    <g transform="translate(0, 72)">
+      <path d="M-22 0 C-20 8 -24 16 -18 18 C-14 16 -16 6 -15 0 Z" fill="#C9A34E" stroke="#523808" stroke-width="1"/>
+      <path d="M22 0 C20 8 24 16 18 18 C14 16 16 6 15 0 Z" fill="#C9A34E" stroke="#523808" stroke-width="1"/>
+    </g>
+
+    <!-- Bottom Red Banner with Scroll Ribbon -->
+    <g transform="translate(0, 92)">
+      <!-- Red Ribbon Body -->
+      <path d="M-50 0 C-30 -7 30 -7 50 0 C58 16 50 28 44 28 C26 21 -26 21 -44 28 C-50 28 -58 16 -50 0 Z" fill="#D9162E" stroke="#7A0012" stroke-width="1.5"/>
+      <!-- Ribbon Ends -->
+      <path d="M-50 0 L-62 12 L-48 18 L-44 28 Z" fill="#A8071B" stroke="#7A0012" stroke-width="1"/>
+      <path d="M50 0 L62 12 L48 18 L44 28 Z" fill="#A8071B" stroke="#7A0012" stroke-width="1"/>
+      
+      <!-- Arabic Text: الإمارات العربية المتحدة -->
+      <text x="0" y="17" font-family="'Traditional Arabic', 'Cairo', 'Amiri', 'Arial', sans-serif" font-weight="bold" font-size="11.5" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">
+        الإمارات العربية المتحدة
+      </text>
+    </g>
+  </g>
+
+  <!-- ======================================================== -->
+  <!-- RIGHT: ARABIC TITLE (MATCHING USER IMAGE TYPOGRAPHY)     -->
+  <!-- ======================================================== -->
+  <g transform="translate(0, 0)">
+    <text x="615" y="235" font-family="'Amiri', 'Traditional Arabic', 'Cairo', 'Arial', sans-serif" font-weight="bold" font-size="34" fill="url(#textGold)" letter-spacing="0.3" text-anchor="start">
+      الإمــارات الـعـربـيــة الـمـتـحـدة
+    </text>
+    <text x="615" y="280" font-family="'Amiri', 'Traditional Arabic', 'Cairo', 'Arial', sans-serif" font-weight="bold" font-size="34" fill="url(#textGold)" letter-spacing="0.3" text-anchor="start">
+      وزارة الـتـربـيــة والـتـعـلـيـم
+    </text>
+  </g>
+</svg>

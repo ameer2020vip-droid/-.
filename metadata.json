@@ -1,0 +1,8 @@
+{
+  "name": "أكاديمية الفجيرة العلمية الإسلامية",
+  "description": "البوابة الإلكترونية الرسمية والمنظومة الذكية لأكاديمية الفجيرة العلمية الإسلامية – العام الدراسي 2026–2027",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
