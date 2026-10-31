@@ -16,7 +16,7 @@ interface FirebaseConfigOptions {
   firestoreDatabaseId?: string;
 }
 
-export const targetDatabaseId = appletConfig.firestoreDatabaseId || 'ai-studio-79f125b0-449a-44e9-a7a6-5a4a1fd9d9d2';
+export const targetDatabaseId = appletConfig.firestoreDatabaseId || 'ai-studio-7049e193-0b31-400e-a46c-4163cfd4f315';
 
 function isValidApiKey(key?: string): boolean {
   if (!key) return false;

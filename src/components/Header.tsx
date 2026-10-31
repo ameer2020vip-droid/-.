@@ -112,9 +112,18 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => {
     const syncStoredNotes = () => {
       try {
-        setStoredCounselorNotes(getCounselorNotifications().filter((n) => !n.acknowledged));
+        const nextNotes = getCounselorNotifications().filter((n) => !n.acknowledged);
+        setStoredCounselorNotes((prev) => {
+          if (
+            prev.length === nextNotes.length &&
+            prev.every((item, idx) => item.id === nextNotes[idx]?.id && item.acknowledged === nextNotes[idx]?.acknowledged)
+          ) {
+            return prev;
+          }
+          return nextNotes;
+        });
       } catch {
-        setStoredCounselorNotes([]);
+        setStoredCounselorNotes((prev) => (prev.length === 0 ? prev : []));
       }
     };
     syncStoredNotes();
@@ -407,8 +416,12 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* School Emblem (Navy #0B2748 with Gold #C9A227) */}
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-[#0B2748] to-[#12395B] border-2 border-[#C9A227] flex items-center justify-center shadow-xs text-[#C9A227] shrink-0">
-              <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white border-2 border-[#C9A227] flex items-center justify-center shadow-xs overflow-hidden p-0.5 shrink-0">
+              <img
+                src="/assets/aistudio/image_3c0494bc.png"
+                alt="شعار أكاديمية الفجيرة العلمية الإسلامية"
+                className="w-full h-full object-contain"
+              />
             </div>
 
             <div>

@@ -26,18 +26,22 @@ import {
   Eye,
 } from 'lucide-react';
 import { useSchoolSettings } from '../context/SchoolSettingsContext';
-import { SchoolSettings, Student, CounselorUser } from '../types';
+import { SchoolSettings, Student, CounselorUser, ViolationRecord } from '../types';
 import { NavTab } from '../components/Navigation';
+import { GmailOAuthIntegrationPanel } from '../components/GmailOAuthIntegrationPanel';
+import { isAuthorizedGmailAdmin } from '../firebase/gmailNotificationService';
 
 interface SettingsPageProps {
   currentUser?: CounselorUser | null;
   students?: Student[];
+  violations?: ViolationRecord[];
+  onOpenStudentProfile?: (studentId: string) => void;
   onNavigateTab?: (tab: NavTab) => void;
   onOpenUsersManagement?: () => void;
   onShowToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
-type SettingsSection = 'school' | 'schedule' | 'rules' | 'messaging' | 'forms' | 'users' | 'data';
+type SettingsSection = 'school' | 'schedule' | 'rules' | 'messaging' | 'gmail_oauth' | 'forms' | 'users' | 'data';
 
 const EMIRATES_LIST = [
   'أبوظبي',
@@ -60,11 +64,14 @@ const CYCLES_LIST = [
 export const SettingsPage: React.FC<SettingsPageProps> = ({
   currentUser,
   students = [],
+  violations = [],
+  onOpenStudentProfile,
   onNavigateTab,
   onOpenUsersManagement,
   onShowToast,
 }) => {
   const { schoolSettings, updateSchoolSettings, resetToDefaults } = useSchoolSettings();
+  const isAdmin = isAuthorizedGmailAdmin(currentUser);
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('school');
   const [formData, setFormData] = useState<SchoolSettings>(schoolSettings);
@@ -220,6 +227,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'schedule', label: 'أوقات الدوام والجدول', icon: Clock },
     { id: 'rules', label: 'ضوابط السلوك والمواظبة', icon: ShieldAlert },
     { id: 'messaging', label: 'المراسلات وأولياء الأمور', icon: MessageSquare },
+    ...(isAdmin
+      ? [{ id: 'gmail_oauth' as SettingsSection, label: 'ربط Gmail التلقائي (للمسؤول)', icon: Mail }]
+      : []),
     { id: 'forms', label: 'النماذج والطباعة الرسمية', icon: FileText },
     { id: 'users', label: 'المستخدمين والصلاحيات', icon: UserCog },
     { id: 'data', label: 'البيانات والنسخ الاحتياطي', icon: Database },
@@ -1226,6 +1236,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     مزامنة نشطة
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* ADMIN-ONLY SECTION: GMAIL OAUTH 2.0 & AUTOMATED NOTIFICATIONS */}
+            {activeSection === 'gmail_oauth' && isAdmin && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <GmailOAuthIntegrationPanel
+                  schoolId={formData.schoolId || '7001'}
+                  currentUser={currentUser}
+                  students={students}
+                  violations={violations}
+                  onOpenStudentProfile={onOpenStudentProfile}
+                  onShowToast={onShowToast}
+                />
               </div>
             )}
 

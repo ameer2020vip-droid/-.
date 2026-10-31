@@ -24,6 +24,15 @@ import {
 } from 'lucide-react';
 import { Student, ViolationRecord } from '../types';
 import { FormTabType } from '../pages/FormsPage';
+import {
+  ACADEMY_STANDARD_GRADES,
+  normalizeCanonicalGrade,
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+  getGradeIconNumber,
+  getGradeCycleSubtitle,
+} from '../hooks/useAcademicFiltering';
 
 interface StudentGradeSectionSearchModalProps {
   isOpen: boolean;
@@ -38,29 +47,15 @@ interface StudentGradeSectionSearchModalProps {
   currentFormTab?: FormTabType;
 }
 
-// Canonical Grade mapping helper to normalize Arabic strings
-const CANONICAL_GRADES = [
-  { key: 'تاسع', label: 'الصف التاسع', shortLabel: 'الصف 9', cycle: 'الحلقة الثالثة' },
-  { key: 'عاشر', label: 'الصف العاشر', shortLabel: 'الصف 10', cycle: 'الحلقة الثالثة' },
-  { key: 'حادي عشر', label: 'الصف الحادي عشر', shortLabel: 'الصف 11', cycle: 'الحلقة الثالثة' },
-  { key: 'ثاني عشر', label: 'الصف الثاني عشر', shortLabel: 'الصف 12', cycle: 'الحلقة الثالثة' },
-];
-
 function normalizeGrade(gradeStr: string | undefined): string {
-  if (!gradeStr) return 'تاسع';
-  const g = gradeStr.toString().toLowerCase().trim();
-  if (g.includes('تاسع') || g === '9' || g.includes('9')) return 'تاسع';
-  if (g.includes('عاشر') || g === '10' || g.includes('10')) return 'عاشر';
-  if (g.includes('حادي') || g === '11' || g.includes('11')) return 'حادي عشر';
-  if (g.includes('ثاني') || g === '12' || g.includes('12')) return 'ثاني عشر';
-  return gradeStr;
+  if (!gradeStr) return 'غير محدد';
+  return normalizeCanonicalGrade(gradeStr) || gradeStr.toString().trim();
 }
 
 function normalizeSection(secStr: string | undefined): string {
-  if (!secStr) return '1';
+  if (!secStr) return 'غير محدد';
   const s = secStr.toString().trim();
-  const digits = s.match(/\d+/);
-  return digits ? digits[0] : s;
+  return s || 'غير محدد';
 }
 
 function normalizeTrack(trackStr: string | undefined): string {
@@ -206,14 +201,28 @@ export const StudentGradeSectionSearchModal: React.FC<StudentGradeSectionSearchM
     return (student: Student) => violatorIdSet.has(student.id);
   }, [students, violations]);
 
+  // Dynamically build CANONICAL_GRADES from actual students (or ACADEMY_STANDARD_GRADES)
+  const CANONICAL_GRADES = useMemo(() => {
+    const gSet = new Set<string>();
+    students.forEach((s) => {
+      const g = normalizeGrade(s.grade);
+      if (g) gSet.add(g);
+    });
+    const keys = gSet.size > 0 ? Array.from(gSet).sort(compareGrades) : [...ACADEMY_STANDARD_GRADES];
+    return keys.map((key) => ({
+      key,
+      label: getGradeDisplayLabel(key),
+      shortLabel: `الصف ${getGradeIconNumber(key)}`,
+      cycle: getGradeCycleSubtitle(key),
+    }));
+  }, [students]);
+
   // Group students by Grade
   const gradeStats = useMemo(() => {
-    const stats: Record<string, { total: number; violators: number; sections: Set<string> }> = {
-      تاسع: { total: 0, violators: 0, sections: new Set() },
-      عاشر: { total: 0, violators: 0, sections: new Set() },
-      'حادي عشر': { total: 0, violators: 0, sections: new Set() },
-      'ثاني عشر': { total: 0, violators: 0, sections: new Set() },
-    };
+    const stats: Record<string, { total: number; violators: number; sections: Set<string> }> = {};
+    CANONICAL_GRADES.forEach((g) => {
+      stats[g.key] = { total: 0, violators: 0, sections: new Set() };
+    });
 
     students.forEach((s) => {
       const g = normalizeGrade(s.grade);
@@ -228,7 +237,7 @@ export const StudentGradeSectionSearchModal: React.FC<StudentGradeSectionSearchM
     });
 
     return stats;
-  }, [students, isStudentViolator]);
+  }, [students, isStudentViolator, CANONICAL_GRADES]);
 
   // Sections dynamically extracted per track for selectedGrade
   const generalSections = useMemo(() => {

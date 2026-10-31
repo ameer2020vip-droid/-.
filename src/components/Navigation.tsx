@@ -21,6 +21,10 @@ import {
   Pencil,
   UserX,
   Briefcase,
+  ChevronDown,
+  Send,
+  FileText,
+  History,
 } from 'lucide-react';
 import { DashboardStats, UserRole } from '../types';
 import { useCustomLabels } from '../context/CustomLabelsContext';
@@ -45,10 +49,39 @@ export type NavTab =
   | 'users'
   | 'settings';
 
+export type CommunicationSubPage =
+  | 'dashboard'
+  | 'new-message'
+  | 'attendance-tardiness'
+  | 'behavior-notices'
+  | 'bulk-messages'
+  | 'templates'
+  | 'communication-log'
+  | 'communication-reports'
+  | 'communication-settings';
+
+export const COMMUNICATION_SUB_PAGES: Array<{
+  id: CommunicationSubPage;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { id: 'dashboard', label: 'لوحة التواصل الرئيسية', icon: LayoutDashboard },
+  { id: 'new-message', label: 'رسالة جديدة', icon: Send },
+  { id: 'attendance-tardiness', label: 'رسائل الغياب والتأخير', icon: Clock },
+  { id: 'behavior-notices', label: 'إشعارات السلوك', icon: ShieldCheck },
+  { id: 'bulk-messages', label: 'الرسائل الجماعية', icon: Users },
+  { id: 'templates', label: 'قوالب الرسائل', icon: FileText },
+  { id: 'communication-log', label: 'سجل التواصل', icon: History },
+  { id: 'communication-reports', label: 'تقارير التواصل', icon: BarChart3 },
+  { id: 'communication-settings', label: 'إعدادات التواصل', icon: Settings },
+];
+
 export interface NavigationProps {
   currentTab: NavTab | string;
   onSelectTab?: (tab: NavTab) => void;
   onTabChange?: (tab: NavTab) => void;
+  activeCommSubPage?: CommunicationSubPage;
+  onSelectCommSubPage?: (subPage: CommunicationSubPage) => void;
   stats?: DashboardStats;
   tardyTodayCount?: number;
   absencesTodayCount?: number;
@@ -78,6 +111,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   currentTab,
   onSelectTab,
   onTabChange,
+  activeCommSubPage = 'dashboard',
+  onSelectCommSubPage,
   stats,
   tardyTodayCount,
   absencesTodayCount,
@@ -99,6 +134,23 @@ export const Navigation: React.FC<NavigationProps> = ({
       return false;
     }
   });
+  const [isCommMenuExpanded, setIsCommMenuExpanded] = useState<boolean>(true);
+  const [internalCommSubPage, setInternalCommSubPage] = useState<CommunicationSubPage>(activeCommSubPage);
+
+  React.useEffect(() => {
+    setInternalCommSubPage(activeCommSubPage);
+  }, [activeCommSubPage]);
+
+  React.useEffect(() => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<CommunicationSubPage>).detail;
+      if (detail) {
+        setInternalCommSubPage(detail);
+      }
+    };
+    window.addEventListener('fujairah:comm-subpage-changed', handler);
+    return () => window.removeEventListener('fujairah:comm-subpage-changed', handler);
+  }, []);
 
   const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
 
@@ -124,13 +176,24 @@ export const Navigation: React.FC<NavigationProps> = ({
     if (onCloseMobile) onCloseMobile();
   };
 
+  const handleSelectCommPage = (subPage: CommunicationSubPage) => {
+    setInternalCommSubPage(subPage);
+    if (onSelectCommSubPage) {
+      onSelectCommSubPage(subPage);
+    }
+    window.dispatchEvent(new CustomEvent('fujairah:comm-subpage', { detail: subPage }));
+    if (onSelectTab) onSelectTab('messages');
+    if (onTabChange) onTabChange('messages');
+    if (onCloseMobile) onCloseMobile();
+  };
+
   const safeTotalStudents = stats?.totalStudents ?? 0;
   const safeTardyToday = stats?.tardyTodayCount ?? tardyTodayCount ?? 0;
   const safeOpenViolations = stats?.openViolationsCount ?? openViolationsCount ?? 0;
   const safeCriticalTardiness = stats?.criticalTardinessCount ?? 0;
   const safeUnconfirmedMessages = unconfirmedMessagesCount ?? 0;
 
-  const canManageUsers = userRole === 'systemAdmin' || userRole === 'schoolAdmin';
+  const canManageUsers = userRole === 'systemAdmin' || userRole === 'schoolAdmin' || userRole === 'system_owner' || userRole === 'school_admin';
   const { t, isLiveEditMode, openCustomizer } = useCustomLabels();
 
   // Navigation Items Definition organized in logical groups without duplicate pages
@@ -207,14 +270,15 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: t('nav.forms', 'النماذج والتوقيعات'),
       icon: FileSignature,
     },
-    // 4. التواصل والتوثيق
+    // 4. التواصل مع أولياء الأمور (مركز التواصل الذكي)
     {
       id: 'messages',
-      group: 'التواصل والتوثيق',
-      label: t('nav.messages', 'التواصل مع أولياء الأمور'),
+      group: 'التواصل مع أولياء الأمور',
+      label: t('nav.messages', 'مركز التواصل الذكي'),
       icon: MessageSquare,
-      badge: safeUnconfirmedMessages > 0 ? safeUnconfirmedMessages : null,
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+      isHighlight: true,
+      badge: safeUnconfirmedMessages > 0 ? safeUnconfirmedMessages : 'ذكي',
+      badgeColor: 'bg-[#C9A227] text-[#0B2748] font-black',
     },
     {
       id: 'employees',
@@ -251,13 +315,25 @@ export const Navigation: React.FC<NavigationProps> = ({
     const Icon = item.icon;
     const exactActive = currentTab === item.id;
     const isActive = exactActive;
+    const isMessagesHub = item.id === 'messages';
 
     return (
-      <div key={item.id} className="relative group w-full">
+      <div key={item.id} className="relative group w-full space-y-1">
         <button
           type="button"
           id={`sidebar-nav-${item.id}`}
-          onClick={() => handleSelect(item.id)}
+          onClick={() => {
+            if (isMessagesHub && !isCollapsed) {
+              if (currentTab === 'messages') {
+                setIsCommMenuExpanded((prev) => !prev);
+              } else {
+                setIsCommMenuExpanded(true);
+                handleSelect('messages');
+              }
+            } else {
+              handleSelect(item.id);
+            }
+          }}
           title={isCollapsed ? item.label : undefined}
           className={`w-full flex items-center transition-all duration-150 cursor-pointer rounded-xl font-medium select-none ${
             isCollapsed
@@ -304,22 +380,61 @@ export const Navigation: React.FC<NavigationProps> = ({
             )}
           </div>
 
-          {/* Badges in expanded mode */}
-          {!isCollapsed && item.badge !== undefined && item.badge !== null && (
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 font-sans ${
-                exactActive ? 'bg-white/25 text-white' : item.badgeColor || 'bg-white/15 text-slate-200'
-              }`}
-            >
-              {item.badge}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Badges in expanded mode */}
+            {!isCollapsed && item.badge !== undefined && item.badge !== null && (
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 font-sans ${
+                  exactActive ? 'bg-white/25 text-white' : item.badgeColor || 'bg-white/15 text-slate-200'
+                }`}
+              >
+                {item.badge}
+              </span>
+            )}
+
+            {!isCollapsed && isMessagesHub && (
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-[#D4AF37] transition-transform duration-200 ${
+                  isCommMenuExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            )}
+          </div>
 
           {/* Small dot indicator in collapsed mode if there is a badge */}
           {isCollapsed && item.badge !== undefined && item.badge !== null && (
             <span className="absolute top-2 left-2 w-2 h-2 rounded-full bg-[#D4AF37] ring-2 ring-[#0C2340]" />
           )}
         </button>
+
+        {/* Sub-menu for التواصل مع أولياء الأمور (Smart Parent Communication Center 9 pages) */}
+        {!isCollapsed && isMessagesHub && isCommMenuExpanded && (
+          <div className="mr-3 pr-2.5 border-r border-[#C9A227]/40 space-y-0.5 py-1">
+            {COMMUNICATION_SUB_PAGES.map((sub) => {
+              const SubIcon = sub.icon;
+              const isSubActive = currentTab === 'messages' && internalCommSubPage === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => handleSelectCommPage(sub.id)}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer text-right ${
+                    isSubActive
+                      ? 'bg-[#C9A227] text-[#0B2748] shadow-xs font-black'
+                      : 'text-slate-300 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <SubIcon
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isSubActive ? 'text-[#0B2748]' : 'text-[#C9A227]/80'
+                    }`}
+                  />
+                  <span className="truncate">{sub.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Floating Tooltip in Collapsed Mode (Left side of right sidebar) */}
         {isCollapsed && (
@@ -358,7 +473,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 أكاديمية الفجيرة العلمية الإسلامية
               </span>
               <span className="text-[10px] text-[#C9A227] block truncate font-medium">
-                نظام الرعاية والإرشاد الطلابي الذكي
+                نظام الرعاية والتواصل الذكي
               </span>
             </div>
           </div>
@@ -406,7 +521,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       {!isCollapsed && (
         <div className="p-3 border-t border-[#16355C] bg-[#091C33] text-[10px] text-slate-400 flex items-center justify-between">
           <span className="text-[#D4AF37] font-semibold">2026–2027</span>
-          <span>الحلقة الثالثة (9 - 12)</span>
+          <span>الصفوف (5 - 12)</span>
         </div>
       )}
     </div>
@@ -454,7 +569,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-bold text-white block">
-                    نظام الرعاية والإرشاد الطلابي الذكي
+                    مركز التواصل الذكي مع أولياء الأمور
                   </span>
                   <span className="text-[10px] text-teal-300 block">
                     {schoolSettings.schoolName}
@@ -471,45 +586,71 @@ export const Navigation: React.FC<NavigationProps> = ({
               </button>
             </div>
 
-            {/* Mobile Drawer Navigation List (Unclassified / Flat List) */}
+            {/* Mobile Drawer Navigation List */}
             <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700">
               {navItems
                 .filter((item) => !item.hidden)
                 .map((item) => {
                   const Icon = item.icon;
                   const exactActive = currentTab === item.id;
+                  const isMessagesHub = item.id === 'messages';
                   return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      id={`mobile-sidebar-nav-${item.id}`}
-                      onClick={() => handleSelect(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${
-                        exactActive
-                          ? 'bg-[#006D77] text-white shadow-sm font-bold ring-1 ring-[#5CE1E6]/40'
-                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Icon
-                          className={`w-4.5 h-4.5 ${
-                            exactActive ? 'text-teal-200' : 'text-slate-400'
-                          }`}
-                        />
-                        <span>{item.label}</span>
-                      </div>
-                      {item.badge !== undefined && item.badge !== null && (
-                        <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-sans ${
-                            exactActive
-                              ? 'bg-white/25 text-white'
-                              : item.badgeColor || 'bg-white/15 text-slate-200'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
+                    <div key={item.id} className="space-y-1">
+                      <button
+                        type="button"
+                        id={`mobile-sidebar-nav-${item.id}`}
+                        onClick={() => handleSelect(item.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                          exactActive
+                            ? 'bg-[#006D77] text-white shadow-sm font-bold ring-1 ring-[#5CE1E6]/40'
+                            : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon
+                            className={`w-4.5 h-4.5 ${
+                              exactActive ? 'text-teal-200' : 'text-slate-400'
+                            }`}
+                          />
+                          <span>{item.label}</span>
+                        </div>
+                        {item.badge !== undefined && item.badge !== null && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-sans ${
+                              exactActive
+                                ? 'bg-white/25 text-white'
+                                : item.badgeColor || 'bg-white/15 text-slate-200'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+
+                      {isMessagesHub && (
+                        <div className="mr-3 pr-2.5 border-r border-[#C9A227]/40 space-y-0.5 py-1">
+                          {COMMUNICATION_SUB_PAGES.map((sub) => {
+                            const SubIcon = sub.icon;
+                            const isSubActive = currentTab === 'messages' && internalCommSubPage === sub.id;
+                            return (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={() => handleSelectCommPage(sub.id)}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer text-right ${
+                                  isSubActive
+                                    ? 'bg-[#C9A227] text-[#0B2748] font-black'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                }`}
+                              >
+                                <SubIcon className={`w-3.5 h-3.5 ${isSubActive ? 'text-[#0B2748]' : 'text-[#C9A227]'}`} />
+                                <span className="truncate">{sub.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
             </div>

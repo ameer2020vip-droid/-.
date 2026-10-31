@@ -28,13 +28,13 @@ const LOCAL_MESSAGE_LOGS_STORAGE_KEY = 'alkhalil_message_logs_v1';
 export const DEFAULT_SCHOOL_MESSAGE_SETTINGS: SchoolMessageSettings = {
   schoolId: DEFAULT_SCHOOL_ID,
   schoolNameAr: 'أكاديمية الفجيرة العلمية الإسلامية',
-  schoolNameEn: 'Fujairah Scientific Islamic Academy',
+  schoolNameEn: 'Fujairah Islamic Scientific Academy',
   schoolNumber: '7001',
   emirate: 'الفجيرة',
-  cycle: 'جميع المراحل الدراسية – الحلقة الثالثة (9 - 12)',
+  cycle: 'جميع المراحل الدراسية (الصف الخامس حتى الثاني عشر)',
   logoUrl: '',
   phone: '09-2220000',
-  email: 'info@fsia.edu.ae',
+  email: 'mohamedadelfujaca@gmail.com',
   defaultSenderName: 'أمير علي عبدالشاكر بكري',
   defaultSenderRole: 'المرشد الأكاديمي والمهني - مكتب الإرشاد الطلابي',
   academicYear: '2026–2027',
@@ -42,7 +42,7 @@ export const DEFAULT_SCHOOL_MESSAGE_SETTINGS: SchoolMessageSettings = {
   whatsappEnabled: true,
   emailEnabled: true,
   autoGreeting: 'السلام عليكم ورحمة الله وبركاته، تحية طيبة وبعد،،',
-  autoFooter: 'نظام الرعاية والإرشاد الطلابي الذكي - أكاديمية الفجيرة العلمية الإسلامية',
+  autoFooter: 'مركز التواصل الذكي مع أولياء الأمور - أكاديمية الفجيرة العلمية الإسلامية',
   updatedAt: new Date().toISOString(),
   updatedBy: 'system',
 };
@@ -132,7 +132,19 @@ export const OFFICIAL_DYNAMIC_VARIABLES: Array<{
     code: '{schoolEmail}',
     aliases: ['{email}', '[بريد_المدرسة]'],
     label: 'بريد المدرسة',
-    description: 'البريد الإلكتروني الرسمي للمدرسة',
+    description: 'البريد الإلكتروني الرسمي للمدرسة (mohamedadelfujaca@gmail.com)',
+  },
+  {
+    code: '{subject}',
+    aliases: ['[المادة]'],
+    label: 'المادة الدراسية',
+    description: 'اسم المادة الدراسية في تنبيهات الواجبات والملاحظات الأكاديمية',
+  },
+  {
+    code: '{messageBody}',
+    aliases: ['[نص_الإعلان]'],
+    label: 'نص الإعلان أو التعميم',
+    description: 'النص المخصص للإعلانات والتعاميم المدرسية العامة',
   },
 ];
 
@@ -174,6 +186,8 @@ const KNOWN_VARIABLE_NAMES = new Set<string>([
   'meetingDate',
   'meetingTime',
   'customText',
+  'subject',
+  'messageBody',
 ]);
 
 export interface VariableValidationResult {
@@ -300,7 +314,9 @@ export function renderMessageVariables(
     .replace(/\[المطلوب_من_ولي_الأمر\]/g, finalMap.requiredGuardianAction || '')
     .replace(/\[المدرسة\]/g, schoolName)
     .replace(/\[هاتف_المدرسة\]/g, schoolPhone)
-    .replace(/\[بريد_المدرسة\]/g, schoolEmail);
+    .replace(/\[بريد_المدرسة\]/g, schoolEmail)
+    .replace(/\[المادة\]/g, finalMap.subject || 'المادة الدراسية')
+    .replace(/\[نص_الإعلان\]/g, finalMap.messageBody || '');
 
   return result.trim();
 }
@@ -740,18 +756,58 @@ export async function addMessageLog(
 }
 
 /**
- * Updates status of a message log record
+ * Updates status of a message log record with ownership enforcement and retry/timestamp tracking
  */
 export async function updateMessageLogStatus(
   schoolId: string,
   logId: string,
   status: MessageStatus,
-  confirmedAt?: string
+  confirmedAt?: string,
+  extraMeta?: {
+    openedAt?: string;
+    notes?: string;
+    actorUid?: string;
+    actorName?: string;
+    actorRole?: string;
+    isRetry?: boolean;
+  }
 ): Promise<void> {
   const existing = getLocalMessageLogs();
+  const target = existing.find((l) => l.id === logId || l.messageId === logId);
+
+  // Enforce RBAC: non-admin staff cannot modify another staff member's send logs
+  if (target && extraMeta?.actorUid && target.createdBy && target.createdBy !== extraMeta.actorUid) {
+    const isAdmin =
+      extraMeta.actorRole === 'system_owner' ||
+      extraMeta.actorRole === 'systemAdmin' ||
+      extraMeta.actorRole === 'school_admin' ||
+      extraMeta.actorRole === 'schoolAdmin';
+    if (!isAdmin) {
+      throw new Error('غير مصرح: لا يُسمح للموظف بتعديل سجل إرسال موظف آخر دون صلاحية إدارية.');
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const openedTimestamp =
+    extraMeta?.openedAt ||
+    (status === 'whatsapp_opened' || status === 'email_opened' ? nowIso : undefined);
+
   const updated = existing.map((l) =>
     l.id === logId || l.messageId === logId
-      ? { ...l, status, ...(confirmedAt ? { confirmedAt } : {}) }
+      ? {
+          ...l,
+          status,
+          ...(confirmedAt ? { confirmedAt } : {}),
+          ...(openedTimestamp ? { openedAt: l.openedAt || openedTimestamp } : {}),
+          ...(extraMeta?.notes ? { notes: extraMeta.notes } : {}),
+          ...(extraMeta?.isRetry
+            ? {
+                retryCount: (l.retryCount || 0) + 1,
+                lastRetryAt: nowIso,
+                retriedBy: extraMeta.actorName || l.createdByName,
+              }
+            : {}),
+        }
       : l
   );
   saveLocalMessageLogs(updated);
@@ -760,8 +816,13 @@ export async function updateMessageLogStatus(
   try {
     const docRef = doc(db, 'schools', schoolId, 'messageLogs', logId);
     const updateData: any = { status };
-    if (confirmedAt) {
-      updateData.confirmedAt = confirmedAt;
+    if (confirmedAt) updateData.confirmedAt = confirmedAt;
+    if (openedTimestamp) updateData.openedAt = openedTimestamp;
+    if (extraMeta?.notes) updateData.notes = extraMeta.notes;
+    if (extraMeta?.isRetry) {
+      updateData.retryCount = (target?.retryCount || 0) + 1;
+      updateData.lastRetryAt = nowIso;
+      updateData.retriedBy = extraMeta?.actorName || '';
     }
     await updateDoc(docRef, updateData);
   } catch (err) {
@@ -866,3 +927,314 @@ export async function saveSchoolMessageSettings(
 
 export const createMessageLog = addMessageLog;
 export const getSchoolMessageSettings = fetchSchoolMessageSettings;
+
+// ============================================================================
+// RBAC PERMISSIONS & SECURITY HELPERS (صلاحيات مركز التواصل الذكي)
+// ============================================================================
+
+export interface CommunicationPermissions {
+  roleLabelAr: string;
+  canAccessCenter: boolean;
+  canViewContactDetails: boolean;
+  canViewFullContactInfo: boolean;
+  canManageSettingsAndTemplates: boolean;
+  canManageSettings: boolean;
+  canApproveSensitiveBehavior: boolean;
+  canSendAbsenceAndTardiness: boolean;
+  canSendAcademicNotes: boolean;
+  canSendBehaviorAndCounseling: boolean;
+  canSendGeneralAnnouncements: boolean;
+  canSendBulk: boolean;
+  canModifyOthersLogs: boolean;
+  canModifyOtherStaffLogs: boolean;
+  canExportReports: boolean;
+}
+
+export function getCommunicationPermissions(user?: {
+  uid?: string;
+  email?: string | null;
+  role?: string | null;
+  jobTitle?: string | null;
+} | null): CommunicationPermissions {
+  if (!user || !user.uid || user.role === 'viewer') {
+    return {
+      roleLabelAr: 'مستخدم عادي (عرض مقيد)',
+      canAccessCenter: false,
+      canViewContactDetails: false,
+      canViewFullContactInfo: false,
+      canManageSettingsAndTemplates: false,
+      canManageSettings: false,
+      canApproveSensitiveBehavior: false,
+      canSendAbsenceAndTardiness: false,
+      canSendAcademicNotes: false,
+      canSendBehaviorAndCounseling: false,
+      canSendGeneralAnnouncements: false,
+      canSendBulk: false,
+      canModifyOthersLogs: false,
+      canModifyOtherStaffLogs: false,
+      canExportReports: false,
+    };
+  }
+
+  const role = String(user.role || 'counselor');
+  const job = String(user.jobTitle || '');
+  const isRootEmail =
+    user.email?.toLowerCase() === 'ameer2020vip@gmail.com' ||
+    user.email?.toLowerCase() === 'mohamedadelfujaca@gmail.com';
+
+  // 1. مدير النظام (System Admin)
+  if (isRootEmail || role === 'system_owner' || role === 'systemAdmin') {
+    return {
+      roleLabelAr: 'مدير النظام المعتمد',
+      canAccessCenter: true,
+      canViewContactDetails: true,
+      canViewFullContactInfo: true,
+      canManageSettingsAndTemplates: true,
+      canManageSettings: true,
+      canApproveSensitiveBehavior: true,
+      canSendAbsenceAndTardiness: true,
+      canSendAcademicNotes: true,
+      canSendBehaviorAndCounseling: true,
+      canSendGeneralAnnouncements: true,
+      canSendBulk: true,
+      canModifyOthersLogs: true,
+      canModifyOtherStaffLogs: true,
+      canExportReports: true,
+    };
+  }
+
+  // 2. مدير الأكاديمية (School Principal / Admin)
+  if (role === 'school_admin' || role === 'schoolAdmin' || job.includes('مدير')) {
+    return {
+      roleLabelAr: 'مدير الأكاديمية',
+      canAccessCenter: true,
+      canViewContactDetails: true,
+      canViewFullContactInfo: true,
+      canManageSettingsAndTemplates: true,
+      canManageSettings: true,
+      canApproveSensitiveBehavior: true,
+      canSendAbsenceAndTardiness: true,
+      canSendAcademicNotes: true,
+      canSendBehaviorAndCounseling: true,
+      canSendGeneralAnnouncements: true,
+      canSendBulk: true,
+      canModifyOthersLogs: true,
+      canModifyOtherStaffLogs: true,
+      canExportReports: true,
+    };
+  }
+
+  // 3. المعلم (Teacher)
+  if (role === 'teacher' || job.includes('معلم')) {
+    return {
+      roleLabelAr: 'معلم (الرسائل الأكاديمية المصرح بها)',
+      canAccessCenter: true,
+      canViewContactDetails: true,
+      canViewFullContactInfo: true,
+      canManageSettingsAndTemplates: false,
+      canManageSettings: false,
+      canApproveSensitiveBehavior: false,
+      canSendAbsenceAndTardiness: false,
+      canSendAcademicNotes: true,
+      canSendBehaviorAndCounseling: false,
+      canSendGeneralAnnouncements: false,
+      canSendBulk: false,
+      canModifyOthersLogs: false,
+      canModifyOtherStaffLogs: false,
+      canExportReports: false,
+    };
+  }
+
+  // 4. المسؤول الأكاديمي (Academic Advisor)
+  if (role === 'academic_advisor' || job.includes('أكاديمي')) {
+    return {
+      roleLabelAr: 'المسؤول / المرشد الأكاديمي',
+      canAccessCenter: true,
+      canViewContactDetails: true,
+      canViewFullContactInfo: true,
+      canManageSettingsAndTemplates: false,
+      canManageSettings: false,
+      canApproveSensitiveBehavior: true,
+      canSendAbsenceAndTardiness: true,
+      canSendAcademicNotes: true,
+      canSendBehaviorAndCounseling: true,
+      canSendGeneralAnnouncements: true,
+      canSendBulk: true,
+      canModifyOthersLogs: false,
+      canModifyOtherStaffLogs: false,
+      canExportReports: true,
+    };
+  }
+
+  // 5. مسؤول شؤون الطلاب (Student Affairs Officer)
+  if (role === 'student_affairs' || job.includes('شؤون الطلبة') || job.includes('شؤون الطلاب')) {
+    return {
+      roleLabelAr: 'مسؤول شؤون الطلاب',
+      canAccessCenter: true,
+      canViewContactDetails: true,
+      canViewFullContactInfo: true,
+      canManageSettingsAndTemplates: false,
+      canManageSettings: false,
+      canApproveSensitiveBehavior: false,
+      canSendAbsenceAndTardiness: true,
+      canSendAcademicNotes: false,
+      canSendBehaviorAndCounseling: false,
+      canSendGeneralAnnouncements: true,
+      canSendBulk: true,
+      canModifyOthersLogs: false,
+      canModifyOtherStaffLogs: false,
+      canExportReports: true,
+    };
+  }
+
+  // 6. المرشد أو الأخصائي (Counselor / Specialist - default staff role)
+  return {
+    roleLabelAr: 'المرشد الطلابي / الأخصائي الاجتماعي',
+    canAccessCenter: true,
+    canViewContactDetails: true,
+    canViewFullContactInfo: true,
+    canManageSettingsAndTemplates: true,
+    canManageSettings: true,
+    canApproveSensitiveBehavior: true,
+    canSendAbsenceAndTardiness: true,
+    canSendAcademicNotes: true,
+    canSendBehaviorAndCounseling: true,
+    canSendGeneralAnnouncements: true,
+    canSendBulk: true,
+    canModifyOthersLogs: false,
+    canModifyOtherStaffLogs: false,
+    canExportReports: true,
+  };
+}
+
+/**
+ * Deterministic deduplication key so the same incident + student + recipient + channel
+ * is not created twice unintentionally, while allowing explicit documented retry.
+ */
+export function computeMessageDedupeKey(params: {
+  schoolId: string;
+  studentNumber: string;
+  category: string;
+  channel: string;
+  recipientAddress: string;
+  incidentId?: string;
+  date?: string;
+}): string {
+  const inc = (params.incidentId || params.date || new Date().toISOString().slice(0, 10)).trim();
+  const addr = (params.recipientAddress || '').trim().toLowerCase();
+  return `${params.schoolId}_${params.category}_${params.studentNumber}_${inc}_${params.channel}_${addr}`;
+}
+
+export function findExistingMessageLogForIncident(
+  logs: MessageLogRecord[],
+  dedupeKey: string
+): MessageLogRecord | undefined {
+  return logs.find(
+    (l) =>
+      l.dedupeKey === dedupeKey &&
+      l.status !== 'cancelled' &&
+      l.status !== 'failed'
+  );
+}
+
+/**
+ * Safe Sandbox Dummy Data (بيانات اختبار وهمية للتجارب الآمنة دون لمس أولياء الأمور الحقيقيين)
+ */
+export const SANDBOX_DUMMY_STUDENTS = [
+  {
+    id: 'test-stu-5001',
+    studentNumber: 'TEST-5001',
+    fullName: 'زايد أحمد الفجيرة (طالب تجريبي - الصف الخامس)',
+    grade: 'خامس',
+    section: '1',
+    track: 'عام',
+    status: 'منتظم' as const,
+    parentName: 'أحمد الفجيرة (ولي أمر تجريبي)',
+    parentRelation: 'الأب',
+    parentPhone: '+971500000001',
+    guardianEmail: 'parent.test1@example.com',
+    email: 'parent.test1@example.com',
+    country: 'الإمارات',
+    totalTardiness: 1,
+    totalViolations: 0,
+    totalAbsences: 1,
+  },
+  {
+    id: 'test-stu-8002',
+    studentNumber: 'TEST-8002',
+    fullName: 'راشد سلطان الكندي (طالب تجريبي - الصف الثامن)',
+    grade: 'ثامن',
+    section: '2',
+    track: 'عام',
+    status: 'منتظم' as const,
+    parentName: 'سلطان الكندي (ولي أمر تجريبي)',
+    parentRelation: 'الأب',
+    parentPhone: '+971500000002',
+    guardianEmail: 'parent.test2@example.com',
+    email: 'parent.test2@example.com',
+    country: 'الإمارات',
+    totalTardiness: 2,
+    totalViolations: 1,
+    totalAbsences: 0,
+  },
+  {
+    id: 'test-stu-1103',
+    studentNumber: 'TEST-1103',
+    fullName: 'خليفة سلطان الكندي (شقيق تجريبي لنفس ولي الأمر - الحادي عشر)',
+    grade: 'حادي عشر',
+    section: '1',
+    track: 'متقدم',
+    status: 'منتظم' as const,
+    parentName: 'سلطان الكندي (ولي أمر تجريبي)',
+    parentRelation: 'الأب',
+    parentPhone: '+971500000002',
+    guardianEmail: 'parent.test2@example.com',
+    email: 'parent.test2@example.com',
+    country: 'الإمارات',
+    totalTardiness: 0,
+    totalViolations: 0,
+    totalAbsences: 1,
+  },
+];
+
+export const MESSAGE_STATUS_LABELS_AR: Record<string, string> = {
+  draft: 'مسودة',
+  ready: 'جاهزة للإرسال',
+  whatsapp_opened: 'تم فتح واتساب',
+  email_opened: 'تم فتح البريد',
+  confirmed_sent: 'أكد الموظف الإرسال',
+  failed: 'فشل أو تعذر الفتح',
+  cancelled: 'ملغاة',
+  skipped: 'ملغاة',
+};
+
+export const MESSAGE_CATEGORY_LABELS_AR: Record<string, string> = {
+  attendance: 'غياب يومي',
+  tardiness: 'تأخير صباحي',
+  behavior: 'ملاحظة سلوكية',
+  guardianCall: 'استدعاء ولي أمر',
+  positive: 'ملاحظة أكاديمية / تعزيز',
+  uniformNotice: 'إعلان عام / تنبيه',
+  committeeDecision: 'قرار لجنة السلوك',
+  phoneConfiscation: 'مصادرة هاتف',
+  custom: 'رسالة مخصصة',
+};
+
+export const FUJAIRAH_DISABLED_APPS_SCRIPT_TEMPLATE = `/**
+ * [المرحلة الثانية الاختيارية - غير مفعّلة افتراضياً]
+ * Google Apps Script Bridge for Fujairah Islamic Scientific Academy
+ * Account: mohamedadelfujaca@gmail.com | Plan: Firebase Spark Free
+ * تنبيه: لا يُفعّل الإرسال التلقائي إلا بعد موافقة صريحة من إدارة الأكاديمية.
+ */
+const ENABLE_AUTO_SEND = false; // يجب أن يبقى false حتى الاعتماد الإداري الصريح
+
+function sendPendingFujairahNotifications() {
+  if (!ENABLE_AUTO_SEND) {
+    Logger.log('الإرسال التلقائي متوقف (المرحلة الأولى mailto هي المعتمدة حالياً).');
+    return;
+  }
+  const quota = MailApp.getRemainingDailyQuota();
+  if (quota < 5) return;
+  // قراءة الطلبات المعتمدة من الجدول الوسيط المؤمّن وإرسالها عبر Gmail الرسمي للأكاديمية
+}`;
+

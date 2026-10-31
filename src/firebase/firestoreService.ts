@@ -434,9 +434,14 @@ export async function batchImportStudentsToFirestore(
         studentNumber: docId,
         id: docId,
         fullName: String(s.fullName || '').trim(),
-        grade: s.grade || 'عاشر',
-        section: s.section || '1',
+        grade: s.grade || 'غير محدد',
+        section: s.section || 'غير محدد',
         track: s.track || 'عام',
+        rawGrade: s.rawGrade,
+        rawSection: s.rawSection,
+        rawTrack: s.rawTrack,
+        hasMissingGradeOrSection:
+          s.hasMissingGradeOrSection ?? (!s.grade || s.grade === 'غير محدد' || !s.section || s.section === 'غير محدد'),
         status: s.status || 'منتظم',
         parentName: String(s.parentName || '').trim() || `ولي أمر الطالب`,
         parentPhone: String(s.parentPhone || '').trim(), // Never default to 0500000000
@@ -528,15 +533,39 @@ export async function addMorningDelay(
 ): Promise<TardinessRecord> {
   if (!isFirebaseReady || !db) throw new Error('قاعدة البيانات غير متصلة.');
 
-  const delaysCol = collection(db, 'schools', schoolId, 'morningDelays');
-  const addedDoc = await addDoc(delaysCol, record);
+  const canonicalStudentNum = String(record.studentNumber || record.studentId || '').trim();
+  const nowIso = new Date().toISOString();
+  const payload = cleanForFirestore({
+    ...record,
+    studentId: canonicalStudentNum || record.studentId,
+    studentNumber: canonicalStudentNum || record.studentNumber,
+    timestamp: record.timestamp || Date.now(),
+    createdAt: record.createdAt || nowIso,
+  });
 
-  // Update totalTardiness on the student document without touching violations or signatures
-  const studentRef = doc(db, 'schools', schoolId, 'students', record.studentNumber);
-  const studentSnap = await getDoc(studentRef);
-  if (studentSnap.exists()) {
-    const currTotal = studentSnap.data().totalTardiness ?? 0;
-    await updateDoc(studentRef, { totalTardiness: currTotal + 1 });
+  const delaysCol = collection(db, 'schools', schoolId, 'morningDelays');
+  const addedDoc = await addDoc(delaysCol, payload);
+
+  // Recalculate totalTardiness on the student document from unique tardiness dates
+  if (canonicalStudentNum) {
+    try {
+      const remainingQ = query(delaysCol, where('studentNumber', '==', canonicalStudentNum));
+      const remainingSnap = await safeGetDocs(remainingQ);
+      const uniqueDates = new Set<string>();
+      remainingSnap.docs.forEach((d) => {
+        const dt = String(d.data()?.date || '').trim();
+        if (dt) uniqueDates.add(dt);
+      });
+      if (record.date) uniqueDates.add(String(record.date).trim());
+
+      const studentRef = doc(db, 'schools', schoolId, 'students', canonicalStudentNum);
+      const studentSnap = await getDoc(studentRef);
+      if (studentSnap.exists()) {
+        await updateDoc(studentRef, { totalTardiness: uniqueDates.size });
+      }
+    } catch (err) {
+      console.warn('Update student totalTardiness notice:', err);
+    }
   }
 
   await createAuditLog(
@@ -545,11 +574,11 @@ export async function addMorningDelay(
     'create',
     'morningDelay',
     addedDoc.id,
-    `تسجيل تأخير صباحي للطالب: ${record.studentName} (${record.studentNumber}) بتاريخ ${record.date}`
+    `تسجيل تأخير صباحي للطالب: ${record.studentName} (${canonicalStudentNum}) بتاريخ ${record.date}`
   );
 
   return {
-    ...record,
+    ...payload,
     id: addedDoc.id,
   };
 }
@@ -566,12 +595,17 @@ export async function deleteMorningDelay(
   await deleteDoc(delayRef);
 
   let newExactCount = 0;
-  // Recalculate true totalTardiness for student from remaining delays
+  // Recalculate true totalTardiness for student from remaining unique tardiness dates
   if (studentNumber) {
     const delaysCol = collection(db, 'schools', schoolId, 'morningDelays');
     const remainingQ = query(delaysCol, where('studentNumber', '==', studentNumber));
     const remainingSnap = await safeGetDocs(remainingQ);
-    newExactCount = remainingSnap.size;
+    const uniqueDates = new Set<string>();
+    remainingSnap.docs.forEach((d) => {
+      const dt = String(d.data()?.date || '').trim();
+      if (dt) uniqueDates.add(dt);
+    });
+    newExactCount = uniqueDates.size;
 
     const studentRef = doc(db, 'schools', schoolId, 'students', studentNumber);
     const studentSnap = await getDoc(studentRef);
@@ -586,7 +620,7 @@ export async function deleteMorningDelay(
     'delete',
     'morningDelay',
     delayId,
-    `حذف سجل تأخير صباحي${studentNumber ? ` للطالب (${studentNumber}) وإعادة احتساب الرصيد الحقيقي (${newExactCount})` : ''}`
+    `حذف سجل تأخير صباحي${studentNumber ? ` للطالب (${studentNumber}) وإعادة احتساب الرصيد الفعلي (${newExactCount})` : ''}`
   );
 
   return newExactCount;
@@ -623,7 +657,12 @@ export async function batchDeleteMorningDelays(
     try {
       const q = query(delaysCol, where('studentNumber', '==', sNum));
       const snap = await safeGetDocs(q);
-      const remainingCount = snap.size;
+      const uniqueDates = new Set<string>();
+      snap.docs.forEach((d) => {
+        const dt = String(d.data()?.date || '').trim();
+        if (dt) uniqueDates.add(dt);
+      });
+      const remainingCount = uniqueDates.size;
       studentNewCounts[sNum] = remainingCount;
 
       const studentRef = doc(db, 'schools', targetSchoolId, 'students', sNum);
@@ -742,12 +781,16 @@ export async function batchAddMorningDelays(
       }
       existingSet.add(key);
 
+      const canonicalStudentNum = String(rec.studentNumber || rec.studentId || '').trim();
       const newDocRef = doc(delaysCol);
-      const dataToSave: TardinessRecord = {
+      const dataToSave: TardinessRecord = cleanForFirestore({
         ...rec,
         id: newDocRef.id,
+        studentId: canonicalStudentNum || rec.studentId,
+        studentNumber: canonicalStudentNum || rec.studentNumber,
         timestamp: now,
-      };
+        createdAt: rec.createdAt || new Date(now).toISOString(),
+      });
       batch.set(newDocRef, dataToSave);
       chunkToSave.push({ ref: newDocRef, data: dataToSave });
     }
@@ -760,19 +803,28 @@ export async function batchAddMorningDelays(
     }
   }
 
-  // Update totalTardiness on affected student documents
-  for (const saved of savedRecords) {
-    if (saved.studentNumber) {
-      try {
-        const studentRef = doc(db, 'schools', targetSchoolId, 'students', saved.studentNumber);
-        const studentSnap = await getDoc(studentRef);
-        if (studentSnap.exists()) {
-          const currTardy = studentSnap.data().totalTardiness ?? 0;
-          await updateDoc(studentRef, { totalTardiness: currTardy + 1 });
+  // Recalculate exact unique tardiness dates for affected student documents
+  const allCombinedDelays = [...existingRecords, ...savedRecords];
+  const affectedStudentNums = Array.from(
+    new Set(savedRecords.map((s) => String(s.studentNumber || s.studentId || '').trim()).filter(Boolean))
+  );
+
+  for (const sNum of affectedStudentNums) {
+    try {
+      const uniqueDates = new Set<string>();
+      for (const d of allCombinedDelays) {
+        const recNum = String(d.studentNumber || d.studentId || '').trim();
+        if (recNum === sNum && d.date) {
+          uniqueDates.add(String(d.date).trim());
         }
-      } catch (err) {
-        console.warn('Update student totalTardiness error:', err);
       }
+      const studentRef = doc(db, 'schools', targetSchoolId, 'students', sNum);
+      const studentSnap = await getDoc(studentRef);
+      if (studentSnap.exists()) {
+        await updateDoc(studentRef, { totalTardiness: uniqueDates.size });
+      }
+    } catch (err) {
+      console.warn('Update student totalTardiness error:', err);
     }
   }
 
@@ -3261,4 +3313,354 @@ export async function saveStudentReferralFirestore(
 
   return updatedList;
 }
+
+// ----------------------------------------------------------------------------
+// DATA INTEGRITY AUDIT & REPAIR (NON-DESTRUCTIVE PREVIEW + CONFIRMED REPAIR)
+// ----------------------------------------------------------------------------
+export interface DataIntegrityAuditReport {
+  timestamp: string;
+  totalStudents: number;
+  totalTardinessRecords: number;
+  totalViolationsRecords: number;
+  studentsWithMissingGradeOrSection: Array<{
+    studentNumber: string;
+    fullName: string;
+    grade: string;
+    section: string;
+    rawGrade?: string;
+    rawSection?: string;
+  }>;
+  studentsWithRecoverableGradeFromRaw: Array<{
+    studentNumber: string;
+    fullName: string;
+    currentGrade: string;
+    rawGrade: string;
+    suggestedGrade: string;
+  }>;
+  unlinkedTardinessRecords: Array<{
+    id: string;
+    studentId: string;
+    studentNumber: string;
+    studentName: string;
+    date: string;
+    matchedStudentByNameOrId?: { studentNumber: string; fullName: string; grade: string; section: string };
+  }>;
+  duplicateTardinessSameDay: Array<{
+    studentNumber: string;
+    studentName: string;
+    date: string;
+    recordIds: string[];
+  }>;
+  unlinkedViolationRecords: Array<{
+    id: string;
+    studentId: string;
+    studentNumber: string;
+    studentName: string;
+    date: string;
+    violationName: string;
+    matchedStudentByNameOrId?: { studentNumber: string; fullName: string; grade: string; section: string };
+  }>;
+  mismatchedTardinessCounters: Array<{
+    studentNumber: string;
+    fullName: string;
+    storedCounter: number;
+    actualUniqueDatesCount: number;
+  }>;
+  mismatchedViolationCounters: Array<{
+    studentNumber: string;
+    fullName: string;
+    storedCounter: number;
+    actualViolationsCount: number;
+  }>;
+}
+
+export async function auditSchoolDataIntegrity(
+  schoolId: string,
+  normalizeGradeFn?: (val: any) => string
+): Promise<DataIntegrityAuditReport> {
+  const targetSchoolId = schoolId || DEFAULT_SCHOOL_ID;
+  const [students, tardinessRecords, violations] = await Promise.all([
+    fetchStudents(targetSchoolId),
+    fetchMorningDelays(targetSchoolId),
+    fetchViolations(targetSchoolId),
+  ]);
+
+  const studentByNum = new Map<string, Student>();
+  const studentByNormName = new Map<string, Student>();
+
+  const normText = (t: string) =>
+    String(t || '')
+      .trim()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ');
+
+  const normId = (id: string) =>
+    String(id || '')
+      .trim()
+      .replace(/^st[-_]?/i, '')
+      .replace(/\s+/g, '');
+
+  for (const s of students) {
+    const sNum = normId(s.studentNumber || s.id);
+    if (sNum) studentByNum.set(sNum, s);
+    if (s.id) studentByNum.set(normId(s.id), s);
+    const nName = normText(s.fullName);
+    if (nName) studentByNormName.set(nName, s);
+  }
+
+  const studentsWithMissingGradeOrSection: DataIntegrityAuditReport['studentsWithMissingGradeOrSection'] = [];
+  const studentsWithRecoverableGradeFromRaw: DataIntegrityAuditReport['studentsWithRecoverableGradeFromRaw'] = [];
+
+  for (const s of students) {
+    if (!s.grade || s.grade === 'غير محدد' || !s.section || s.section === 'غير محدد' || s.hasMissingGradeOrSection) {
+      studentsWithMissingGradeOrSection.push({
+        studentNumber: s.studentNumber || s.id,
+        fullName: s.fullName,
+        grade: s.grade || 'غير محدد',
+        section: s.section || 'غير محدد',
+        rawGrade: s.rawGrade,
+        rawSection: s.rawSection,
+      });
+    }
+    if (normalizeGradeFn && s.rawGrade) {
+      const recovered = normalizeGradeFn(s.rawGrade);
+      if (recovered && recovered !== 'غير محدد' && recovered !== s.grade) {
+        studentsWithRecoverableGradeFromRaw.push({
+          studentNumber: s.studentNumber || s.id,
+          fullName: s.fullName,
+          currentGrade: s.grade,
+          rawGrade: s.rawGrade,
+          suggestedGrade: recovered,
+        });
+      }
+    }
+  }
+
+  const unlinkedTardinessRecords: DataIntegrityAuditReport['unlinkedTardinessRecords'] = [];
+  const tardyByStudentAndDate = new Map<string, { studentNumber: string; studentName: string; date: string; ids: string[] }>();
+  const uniqueDatesByStudent = new Map<string, Set<string>>();
+
+  for (const r of tardinessRecords) {
+    const rNum = normId(r.studentNumber || r.studentId);
+    let matched = studentByNum.get(rNum);
+    const exactMatch = Boolean(matched && (r.studentNumber === matched.studentNumber || r.studentId === matched.id));
+
+    if (!matched && r.studentName) {
+      matched = studentByNormName.get(normText(r.studentName));
+    }
+
+    if (!exactMatch) {
+      unlinkedTardinessRecords.push({
+        id: r.id,
+        studentId: r.studentId || '',
+        studentNumber: r.studentNumber || '',
+        studentName: r.studentName || '',
+        date: r.date || '',
+        matchedStudentByNameOrId: matched
+          ? {
+              studentNumber: matched.studentNumber || matched.id,
+              fullName: matched.fullName,
+              grade: matched.grade,
+              section: matched.section,
+            }
+          : undefined,
+      });
+    }
+
+    const effectiveStudentNum = matched ? matched.studentNumber || matched.id : rNum;
+    if (effectiveStudentNum && r.date) {
+      const dt = String(r.date).trim();
+      if (!uniqueDatesByStudent.has(effectiveStudentNum)) {
+        uniqueDatesByStudent.set(effectiveStudentNum, new Set());
+      }
+      uniqueDatesByStudent.get(effectiveStudentNum)!.add(dt);
+
+      const key = `${effectiveStudentNum}__${dt}`;
+      const entry = tardyByStudentAndDate.get(key) || {
+        studentNumber: effectiveStudentNum,
+        studentName: r.studentName || matched?.fullName || '',
+        date: dt,
+        ids: [],
+      };
+      entry.ids.push(r.id);
+      tardyByStudentAndDate.set(key, entry);
+    }
+  }
+
+  const duplicateTardinessSameDay: DataIntegrityAuditReport['duplicateTardinessSameDay'] = [];
+  tardyByStudentAndDate.forEach((val) => {
+    if (val.ids.length > 1) {
+      duplicateTardinessSameDay.push({
+        studentNumber: val.studentNumber,
+        studentName: val.studentName,
+        date: val.date,
+        recordIds: val.ids,
+      });
+    }
+  });
+
+  const unlinkedViolationRecords: DataIntegrityAuditReport['unlinkedViolationRecords'] = [];
+  const violationsCountByStudent = new Map<string, number>();
+
+  for (const v of violations) {
+    const vNum = normId(v.studentNumber || v.studentId);
+    let matched = studentByNum.get(vNum);
+    const exactMatch = Boolean(matched && (v.studentNumber === matched.studentNumber || v.studentId === matched.id));
+
+    if (!matched && v.studentName) {
+      matched = studentByNormName.get(normText(v.studentName));
+    }
+
+    if (!exactMatch) {
+      unlinkedViolationRecords.push({
+        id: v.id,
+        studentId: v.studentId || '',
+        studentNumber: v.studentNumber || '',
+        studentName: v.studentName || '',
+        date: v.date || '',
+        violationName: v.violationName || '',
+        matchedStudentByNameOrId: matched
+          ? {
+              studentNumber: matched.studentNumber || matched.id,
+              fullName: matched.fullName,
+              grade: matched.grade,
+              section: matched.section,
+            }
+          : undefined,
+      });
+    }
+
+    const effectiveStudentNum = matched ? matched.studentNumber || matched.id : vNum;
+    if (effectiveStudentNum) {
+      violationsCountByStudent.set(effectiveStudentNum, (violationsCountByStudent.get(effectiveStudentNum) || 0) + 1);
+    }
+  }
+
+  const mismatchedTardinessCounters: DataIntegrityAuditReport['mismatchedTardinessCounters'] = [];
+  const mismatchedViolationCounters: DataIntegrityAuditReport['mismatchedViolationCounters'] = [];
+
+  for (const s of students) {
+    const sNum = s.studentNumber || s.id;
+    const actualTardy = uniqueDatesByStudent.get(sNum)?.size || 0;
+    const storedTardy = s.totalTardiness || 0;
+    if (actualTardy !== storedTardy) {
+      mismatchedTardinessCounters.push({
+        studentNumber: sNum,
+        fullName: s.fullName,
+        storedCounter: storedTardy,
+        actualUniqueDatesCount: actualTardy,
+      });
+    }
+
+    const actualViol = violationsCountByStudent.get(sNum) || 0;
+    const storedViol = s.totalViolations || 0;
+    if (actualViol !== storedViol) {
+      mismatchedViolationCounters.push({
+        studentNumber: sNum,
+        fullName: s.fullName,
+        storedCounter: storedViol,
+        actualViolationsCount: actualViol,
+      });
+    }
+  }
+
+  return {
+    timestamp: new Date().toISOString(),
+    totalStudents: students.length,
+    totalTardinessRecords: tardinessRecords.length,
+    totalViolationsRecords: violations.length,
+    studentsWithMissingGradeOrSection,
+    studentsWithRecoverableGradeFromRaw,
+    unlinkedTardinessRecords,
+    duplicateTardinessSameDay,
+    unlinkedViolationRecords,
+    mismatchedTardinessCounters,
+    mismatchedViolationCounters,
+  };
+}
+
+export async function repairSchoolDataLinks(
+  schoolId: string,
+  report: DataIntegrityAuditReport,
+  currentUser: AppUser
+): Promise<{
+  repairedTardinessLinks: number;
+  repairedViolationLinks: number;
+  repairedGrades: number;
+  updatedCounters: number;
+}> {
+  if (!isFirebaseReady || !db) throw new Error('قاعدة البيانات غير متصلة.');
+  const targetSchoolId = schoolId || DEFAULT_SCHOOL_ID;
+
+  let repairedTardinessLinks = 0;
+  let repairedViolationLinks = 0;
+  let repairedGrades = 0;
+  let updatedCounters = 0;
+
+  for (const item of report.unlinkedTardinessRecords) {
+    if (item.matchedStudentByNameOrId) {
+      const ref = doc(db, 'schools', targetSchoolId, 'morningDelays', item.id);
+      await updateDoc(ref, {
+        studentId: item.matchedStudentByNameOrId.studentNumber,
+        studentNumber: item.matchedStudentByNameOrId.studentNumber,
+        grade: item.matchedStudentByNameOrId.grade,
+        section: item.matchedStudentByNameOrId.section,
+      });
+      repairedTardinessLinks++;
+    }
+  }
+
+  for (const item of report.unlinkedViolationRecords) {
+    if (item.matchedStudentByNameOrId) {
+      const ref = doc(db, 'schools', targetSchoolId, 'violations', item.id);
+      await updateDoc(ref, {
+        studentId: item.matchedStudentByNameOrId.studentNumber,
+        studentNumber: item.matchedStudentByNameOrId.studentNumber,
+        grade: item.matchedStudentByNameOrId.grade,
+        section: item.matchedStudentByNameOrId.section,
+      });
+      repairedViolationLinks++;
+    }
+  }
+
+  for (const item of report.studentsWithRecoverableGradeFromRaw) {
+    const ref = doc(db, 'schools', targetSchoolId, 'students', item.studentNumber);
+    await updateDoc(ref, {
+      grade: item.suggestedGrade,
+      hasMissingGradeOrSection: false,
+    });
+    repairedGrades++;
+  }
+
+  for (const item of report.mismatchedTardinessCounters) {
+    const ref = doc(db, 'schools', targetSchoolId, 'students', item.studentNumber);
+    await updateDoc(ref, { totalTardiness: item.actualUniqueDatesCount });
+    updatedCounters++;
+  }
+
+  for (const item of report.mismatchedViolationCounters) {
+    const ref = doc(db, 'schools', targetSchoolId, 'students', item.studentNumber);
+    await updateDoc(ref, { totalViolations: item.actualViolationsCount });
+    updatedCounters++;
+  }
+
+  await createAuditLog(
+    targetSchoolId,
+    currentUser,
+    'update',
+    'student',
+    `repair-${Date.now()}`,
+    `إصلاح ربط السجلات: تأخير (${repairedTardinessLinks})، مخالفات (${repairedViolationLinks})، صفوف (${repairedGrades})، عدادات (${updatedCounters})`
+  ).catch(() => {});
+
+  return {
+    repairedTardinessLinks,
+    repairedViolationLinks,
+    repairedGrades,
+    updatedCounters,
+  };
+}
+
 

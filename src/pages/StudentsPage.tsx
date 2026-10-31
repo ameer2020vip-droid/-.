@@ -46,6 +46,13 @@ import {
   getPositiveBehaviorRecords,
   STORAGE_EVENT_NAME,
 } from '../storage';
+import {
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+  getUniqueStudentTardinessDates,
+  getStudentTardinessRecordsList,
+} from '../hooks/useAcademicFiltering';
 
 export type SortField =
   | 'name_asc'
@@ -61,6 +68,9 @@ export type SortField =
 
 interface StudentsPageProps {
   students: Student[];
+  tardinessRecords?: TardinessRecord[];
+  violations?: ViolationRecord[];
+  absences?: AbsenceRecord[];
   onOpenProfile: (studentId: string) => void;
   onOpenAddModal: () => void;
   onOpenImportModal: () => void;
@@ -75,6 +85,9 @@ interface StudentsPageProps {
 
 export const StudentsPage: React.FC<StudentsPageProps> = ({
   students,
+  tardinessRecords: propTardinessRecords,
+  violations: propViolations,
+  absences: propAbsences,
   onOpenProfile,
   onOpenAddModal,
   onOpenImportModal,
@@ -86,10 +99,10 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
   onDeleteStudent,
   isViewer = false,
 }) => {
-  // Live storage records for true counts and KPIs
-  const [violationsList, setViolationsList] = useState<ViolationRecord[]>(() => getViolations());
-  const [tardinessList, setTardinessList] = useState<TardinessRecord[]>(() => getTardinessRecords());
-  const [absencesList, setAbsencesList] = useState<AbsenceRecord[]>(() => getAbsences());
+  // Live storage & Firestore records for true counts and KPIs
+  const [storageViolations, setStorageViolations] = useState<ViolationRecord[]>(() => getViolations());
+  const [storageTardiness, setStorageTardiness] = useState<TardinessRecord[]>(() => getTardinessRecords());
+  const [storageAbsences, setStorageAbsences] = useState<AbsenceRecord[]>(() => getAbsences());
   const [positiveRecords, setPositiveRecords] = useState(() => getPositiveBehaviorRecords());
 
   // Listen to storage update event asynchronously to avoid setState during render
@@ -98,9 +111,9 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
     const handleStorageUpdate = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        setViolationsList(getViolations());
-        setTardinessList(getTardinessRecords());
-        setAbsencesList(getAbsences());
+        setStorageViolations(getViolations());
+        setStorageTardiness(getTardinessRecords());
+        setStorageAbsences(getAbsences());
         setPositiveRecords(getPositiveBehaviorRecords());
       }, 50);
     };
@@ -113,6 +126,21 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
       window.removeEventListener('storage', handleStorageUpdate);
     };
   }, []);
+
+  const violationsList = useMemo(() => {
+    if (propViolations && propViolations.length > 0) return propViolations;
+    return storageViolations;
+  }, [propViolations, storageViolations]);
+
+  const tardinessList = useMemo(() => {
+    if (propTardinessRecords && propTardinessRecords.length > 0) return propTardinessRecords;
+    return storageTardiness;
+  }, [propTardinessRecords, storageTardiness]);
+
+  const absencesList = useMemo(() => {
+    if (propAbsences && propAbsences.length > 0) return propAbsences;
+    return storageAbsences;
+  }, [propAbsences, storageAbsences]);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -131,6 +159,7 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
   // Modals & Menu States
   const [selectedStudentToEdit, setSelectedStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [tardinessDatesPreviewStudent, setTardinessDatesPreviewStudent] = useState<Student | null>(null);
   const [activeMenuStudentId, setActiveMenuStudentId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -167,13 +196,10 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
     return triples;
   }, [students]);
 
-  // 2. Available Grades sorted by high school cycle
+  // 2. Available Grades sorted dynamically in ascending academic order (5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12)
   const availableGrades = useMemo(() => {
-    const gradesOrder = ['تاسع', 'عاشر', 'حادي عشر', 'ثاني عشر'];
     const existingGrades: string[] = Array.from(academicTriples.keys());
-    return existingGrades.sort(
-      (a: string, b: string) => gradesOrder.indexOf(a) - gradesOrder.indexOf(b)
-    );
+    return existingGrades.sort(compareGrades);
   }, [academicTriples]);
 
   // 3. Available Tracks (Dynamic based on selected grade)
@@ -191,7 +217,7 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
     if (gradeFilter === 'all') {
       const allSecs = new Set<string>();
       students.forEach((s) => allSecs.add(String(s.section)));
-      return Array.from(allSecs).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      return Array.from(allSecs).sort(compareSections);
     }
 
     const trackMap = academicTriples.get(gradeFilter);
@@ -202,12 +228,10 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
       trackMap.forEach((sections) => {
         sections.forEach((sec) => allSecs.add(sec));
       });
-      return Array.from(allSecs).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      return Array.from(allSecs).sort(compareSections);
     }
 
-    return Array.from(trackMap.get(trackFilter) || []).sort((a: string, b: string) =>
-      String(a).localeCompare(String(b), undefined, { numeric: true })
-    );
+    return Array.from(trackMap.get(trackFilter) || []).sort(compareSections);
   }, [academicTriples, gradeFilter, trackFilter, students]);
 
   // Handlers for filter adjustments with page reset
@@ -266,15 +290,11 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
     };
   }, [violationsList]);
 
-  // Helper: Count true tardiness for student
+  // Helper: Count true tardiness for student from actual unique tardiness dates
   const getStudentTardinessCount = useMemo(() => {
     return (s: Student) => {
-      const direct = tardinessList.filter(
-        (t) =>
-          t.studentId === s.id ||
-          (s.studentNumber && t.studentNumber === s.studentNumber)
-      ).length;
-      return Math.max(s.totalTardiness || 0, direct);
+      const uniqueDates = getUniqueStudentTardinessDates(s, tardinessList);
+      return uniqueDates.length;
     };
   }, [tardinessList]);
 
@@ -438,12 +458,10 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
           b.studentNumber.localeCompare(a.studentNumber, undefined, { numeric: true })
         );
       case 'grade_section': {
-        const gradesOrder = ['تاسع', 'عاشر', 'حادي عشر', 'ثاني عشر'];
         return list.sort((a, b) => {
-          const gA = gradesOrder.indexOf(a.grade);
-          const gB = gradesOrder.indexOf(b.grade);
-          if (gA !== gB) return gA - gB;
-          return String(a.section).localeCompare(String(b.section), undefined, { numeric: true });
+          const gDiff = compareGrades(a.grade, b.grade);
+          if (gDiff !== 0) return gDiff;
+          return compareSections(String(a.section), String(b.section));
         });
       }
       case 'behavior_desc':
@@ -797,7 +815,7 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
               <option value="all">كل الصفوف</option>
               {availableGrades.map((g) => (
                 <option key={g} value={g}>
-                  الصف {g}
+                  {getGradeDisplayLabel(g)}
                 </option>
               ))}
             </select>
@@ -1094,17 +1112,10 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
                       ? 'bg-amber-500'
                       : 'bg-rose-500';
 
-                  // Section display
-                  const sectionDisplay =
-                    String(s.section).includes('/')
-                      ? s.section
-                      : s.grade === 'عاشر'
-                      ? `1/${s.section}`
-                      : s.grade === 'حادي عشر'
-                      ? `2/${s.section}`
-                      : s.grade === 'ثاني عشر'
-                      ? `3/${s.section}`
-                      : s.section;
+                  // Preserve real section value as imported
+                  const sectionDisplay = s.section || 'غير محدد';
+                  const hasMissingAcademicInfo =
+                    !s.grade || s.grade === 'غير محدد' || !s.section || s.section === 'غير محدد' || s.hasMissingGradeOrSection;
 
                   return (
                     <tr
@@ -1135,27 +1146,50 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
 
                       {/* 4. Grade (Never breaks lines) */}
                       <td className="py-3.5 px-4 text-xs font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap min-w-[120px] text-right">
-                        {s.grade}
+                        {s.grade === 'غير محدد' || !s.grade ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentToEdit(s)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[11px] font-black cursor-pointer"
+                            title="الصف غير محدد في ملف الاستيراد - اضغط لتحديد الصف"
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>غير محدد</span>
+                          </button>
+                        ) : (
+                          <span>{getGradeDisplayLabel(s.grade)}</span>
+                        )}
                       </td>
 
                       {/* 5. Track */}
                       <td className="py-3.5 px-4 text-right">
                         <span
                           className={`inline-block px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${
-                            s.track === 'متقدم'
+                            s.track === 'متقدم' || s.track === 'نخبة'
                               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                               : s.track === 'يحتاج مراجعة'
                               ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                           }`}
                         >
-                          {s.track || 'العام'}
+                          {s.track || 'عام'}
                         </span>
                       </td>
 
                       {/* 6. Section */}
                       <td className="py-3.5 px-4 text-center font-mono font-bold text-xs text-slate-600 dark:text-slate-400">
-                        {sectionDisplay}
+                        {sectionDisplay === 'غير محدد' || hasMissingAcademicInfo ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentToEdit(s)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[11px] font-black cursor-pointer"
+                            title="بيانات الصف أو الشعبة تحتاج مراجعة - اضغط للتعديل"
+                          >
+                            <span>{sectionDisplay}</span>
+                          </button>
+                        ) : (
+                          sectionDisplay
+                        )}
                       </td>
 
                       {/* 7. Parent / Responsible Person (Aligned to the Right) */}
@@ -1222,25 +1256,31 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
                       {/* 9. Violations & Tardiness */}
                       <td className="py-3.5 px-4 text-center text-xs">
                         <div className="inline-flex items-center gap-1.5 whitespace-nowrap font-bold">
-                          <span
-                            className={
+                          <button
+                            type="button"
+                            onClick={() => onOpenProfile(s.id)}
+                            className={`cursor-pointer hover:underline ${
                               trueViolations > 0
                                 ? 'text-rose-600 dark:text-rose-400'
                                 : 'text-slate-400'
-                            }
+                            }`}
+                            title="عرض المخالفات في ملف الطالب"
                           >
                             {trueViolations} مخالفة
-                          </span>
+                          </button>
                           <span className="text-slate-300 dark:text-slate-600">•</span>
-                          <span
-                            className={
+                          <button
+                            type="button"
+                            onClick={() => setTardinessDatesPreviewStudent(s)}
+                            className={`cursor-pointer hover:underline ${
                               trueTardies > 0
-                                ? 'text-sky-600 dark:text-sky-400'
+                                ? 'text-sky-600 dark:text-sky-400 font-black'
                                 : 'text-slate-400'
-                            }
+                            }`}
+                            title="اضغط لعرض التواريخ الفعلية المحتسبة في رصيد التأخير التراكمي"
                           >
                             {trueTardies} تأخر
-                          </span>
+                          </button>
                         </div>
                       </td>
 
@@ -1517,6 +1557,109 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
           }}
           onCancel={() => setStudentToDelete(null)}
         />
+      )}
+
+      {/* Modal: Unique Tardiness Dates Breakdown for Selected Student */}
+      {tardinessDatesPreviewStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0C2340] w-full max-w-lg rounded-2xl border-2 border-[#C9A227] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-[#0B2748] text-white px-5 py-4 flex items-center justify-between border-b border-[#C9A227]/40">
+              <div className="flex items-center gap-2.5">
+                <Clock className="w-5 h-5 text-[#C9A227]" />
+                <div>
+                  <h3 className="text-sm font-black">التواريخ المحتسبة في رصيد التأخير التراكمي</h3>
+                  <p className="text-[11px] text-slate-300">
+                    {tardinessDatesPreviewStudent.fullName} ({tardinessDatesPreviewStudent.studentNumber}) — {getGradeDisplayLabel(tardinessDatesPreviewStudent.grade)} / شعبة {tardinessDatesPreviewStudent.section}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTardinessDatesPreviewStudent(null)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {(() => {
+                const uniqueDates = getUniqueStudentTardinessDates(tardinessDatesPreviewStudent, tardinessList);
+                const fullRecords = getStudentTardinessRecordsList(tardinessDatesPreviewStudent, tardinessList);
+                if (uniqueDates.length === 0) {
+                  return (
+                    <div className="py-8 text-center text-slate-500 dark:text-slate-400 text-xs font-bold">
+                      لا توجد أيام تأخير صباحي مسجلة لهذا الطالب خلال العام الدراسي الحالي.
+                    </div>
+                  );
+                }
+                return (
+                  <>
+                    <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 flex items-center justify-between">
+                      <span className="text-xs font-bold text-sky-900 dark:text-sky-200">
+                        إجمالي أيام التأخير الفعلية المحتسبة (بدون تكرار لليوم الواحد):
+                      </span>
+                      <span className="px-3 py-1 rounded-lg bg-[#0B2748] text-[#C9A227] font-mono font-black text-sm">
+                        {uniqueDates.length} أيام
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {uniqueDates.map((dateStr, idx) => {
+                        const dayRec = fullRecords.find((r) => String(r.date).trim() === dateStr);
+                        return (
+                          <div
+                            key={dateStr}
+                            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-lg bg-[#0B2748] text-[#C9A227] font-mono font-black flex items-center justify-center text-[11px]">
+                                {idx + 1}
+                              </span>
+                              <div>
+                                <span className="font-mono font-black text-slate-800 dark:text-slate-100 block">
+                                  {dateStr}
+                                </span>
+                                {dayRec && (
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    وقت الوصول: {dayRec.arrivalTime || dayRec.time || 'غير محدد'} • الإجراء: {dayRec.actionTaken || dayRec.suggestedAction || 'تنبيه'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {dayRec?.recordedBy && (
+                              <span className="text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+                                {dayRec.recordedBy}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const id = tardinessDatesPreviewStudent.id;
+                  setTardinessDatesPreviewStudent(null);
+                  onOpenProfile(id);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#0B2748] text-[#C9A227] font-bold text-xs hover:bg-[#12395B] cursor-pointer"
+              >
+                فتح ملف الطالب الموحد الكامل
+              </button>
+              <button
+                type="button"
+                onClick={() => setTardinessDatesPreviewStudent(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

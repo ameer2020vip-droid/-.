@@ -362,9 +362,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     if (!parseResult) return [];
     const map = new Map<string, { grade: string; track: string; section: string; count: number }>();
     parseResult.validStudents.forEach((st) => {
-      const g = st.grade || 'تاسع';
+      const g = st.grade || 'غير محدد';
       const trk = st.track || 'عام';
-      const sec = st.section || '1';
+      const sec = st.section || 'غير محدد';
       const key = `${g}-${trk}-${sec}`;
       const existing = map.get(key);
       if (existing) {
@@ -373,18 +373,29 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         map.set(key, { grade: g, track: trk, section: sec, count: 1 });
       }
     });
+    const rankOrder: Record<string, number> = {
+      'أول': 1, 'ثاني': 2, 'ثالث': 3, 'رابع': 4,
+      'خامس': 5, 'سادس': 6, 'سابع': 7, 'ثامن': 8,
+      'تاسع': 9, 'عاشر': 10, 'حادي عشر': 11, 'ثاني عشر': 12,
+      'غير محدد': 999,
+    };
     return Array.from(map.values()).sort((a, b) => {
-      const gCmp = a.grade.localeCompare(b.grade);
+      const rA = rankOrder[a.grade] ?? 500;
+      const rB = rankOrder[b.grade] ?? 500;
+      if (rA !== rB) return rA - rB;
+      const gCmp = a.grade.localeCompare(b.grade, 'ar', { numeric: true });
       if (gCmp !== 0) return gCmp;
-      const tCmp = a.track.localeCompare(b.track);
+      const tCmp = a.track.localeCompare(b.track, 'ar');
       if (tCmp !== 0) return tCmp;
-      return a.section.localeCompare(b.section);
+      return a.section.localeCompare(b.section, 'ar', { numeric: true });
     });
   }, [parseResult]);
 
   const needsReviewInBatch = useMemo(() => {
     if (!parseResult) return 0;
-    return parseResult.validStudents.filter((st) => st.track === 'يحتاج مراجعة').length;
+    return parseResult.validStudents.filter(
+      (st) => st.track === 'يحتاج مراجعة' || st.grade === 'غير محدد' || st.hasMissingGradeOrSection
+    ).length;
   }, [parseResult]);
 
   if (!isOpen) return null;

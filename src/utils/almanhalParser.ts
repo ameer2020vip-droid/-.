@@ -416,17 +416,24 @@ export function normalizeStudentNumber(val: any): string {
  * Evaluates grades in descending order (12 -> 11 -> 10 -> 9) to prevent digit cross-matching.
  */
 export function normalizeStrictGrade(val: any): GradeLevel | null {
-  if (!val) return null;
-  let s = String(val).trim().toLowerCase();
+  if (val === null || val === undefined) return null;
+  let s = String(val).trim();
+  if (!s) return null;
 
   // Convert Arabic-Indic numerals
   s = s
-    .replace(/١٢/g, '12')
-    .replace(/١١/g, '11')
-    .replace(/١٠/g, '10')
+    .replace(/٠/g, '0')
+    .replace(/١/g, '1')
+    .replace(/٢/g, '2')
+    .replace(/٣/g, '3')
+    .replace(/٤/g, '4')
+    .replace(/٥/g, '5')
+    .replace(/٦/g, '6')
+    .replace(/٧/g, '7')
+    .replace(/٨/g, '8')
     .replace(/٩/g, '9');
 
-  const norm = normalizeHeader(s);
+  const norm = normalizeHeader(s.toLowerCase());
 
   // Exclude administrative headings mistakenly placed in grade
   if (
@@ -438,67 +445,141 @@ export function normalizeStrictGrade(val: any): GradeLevel | null {
     norm.includes('الفجيره') ||
     norm.includes('وزاره') ||
     norm.includes('تقرير') ||
-    norm.includes('بيانات')
+    norm.includes('بيانات') ||
+    norm === 'غير محدد' ||
+    norm === 'unspecified'
   ) {
     return null;
   }
 
+  // Strip section suffixes like "5/1", "10-2", "الصف الخامس / 2" before checking isolated digits
+  const withoutSlashSection = norm.replace(/\b(12|11|10|[1-9])\s*[\/\-_]\s*[0-9a-zأ-ي]+\b/g, '$1');
+
   // 12 (ثاني عشر)
   if (
-    norm.includes('ثاني عشر') ||
-    norm.includes('12') ||
-    norm.includes('g12') ||
-    norm.includes('grade 12') ||
-    norm.includes('صف 12')
+    withoutSlashSection.includes('ثاني عشر') ||
+    withoutSlashSection.includes('الثاني عشر') ||
+    /\b(12|g12|gr12|grade\s*12|صف\s*12|الصف\s*12)\b/i.test(withoutSlashSection)
   ) {
     return 'ثاني عشر';
   }
 
   // 11 (حادي عشر)
   if (
-    norm.includes('حادي عشر') ||
-    norm.includes('11') ||
-    norm.includes('g11') ||
-    norm.includes('grade 11') ||
-    norm.includes('صف 11')
+    withoutSlashSection.includes('حادي عشر') ||
+    withoutSlashSection.includes('الحادي عشر') ||
+    /\b(11|g11|gr11|grade\s*11|صف\s*11|الصف\s*11)\b/i.test(withoutSlashSection)
   ) {
     return 'حادي عشر';
   }
 
   // 10 (عاشر)
   if (
-    norm.includes('عاشر') ||
-    norm.includes('10') ||
-    norm.includes('g10') ||
-    norm.includes('grade 10') ||
-    norm.includes('صف 10')
+    withoutSlashSection.includes('عاشر') ||
+    withoutSlashSection.includes('العاشر') ||
+    /\b(10|g10|gr10|grade\s*10|صف\s*10|الصف\s*10)\b/i.test(withoutSlashSection)
   ) {
     return 'عاشر';
   }
 
   // 9 (تاسع)
   if (
-    norm.includes('تاسع') ||
-    norm.includes('9') ||
-    norm.includes('g9') ||
-    norm.includes('grade 9') ||
-    norm.includes('صف 9')
+    withoutSlashSection.includes('تاسع') ||
+    withoutSlashSection.includes('التاسع') ||
+    /\b(9|09|g9|gr9|grade\s*9|صف\s*9|الصف\s*9)\b/i.test(withoutSlashSection)
   ) {
     return 'تاسع';
+  }
+
+  // 8 (ثامن)
+  if (
+    withoutSlashSection.includes('ثامن') ||
+    withoutSlashSection.includes('الثامن') ||
+    /\b(8|08|g8|gr8|grade\s*8|صف\s*8|الصف\s*8)\b/i.test(withoutSlashSection)
+  ) {
+    return 'ثامن';
+  }
+
+  // 7 (سابع)
+  if (
+    withoutSlashSection.includes('سابع') ||
+    withoutSlashSection.includes('السابع') ||
+    /\b(7|07|g7|gr7|grade\s*7|صف\s*7|الصف\s*7)\b/i.test(withoutSlashSection)
+  ) {
+    return 'سابع';
+  }
+
+  // 6 (سادس)
+  if (
+    withoutSlashSection.includes('سادس') ||
+    withoutSlashSection.includes('السادس') ||
+    /\b(6|06|g6|gr6|grade\s*6|صف\s*6|الصف\s*6)\b/i.test(withoutSlashSection)
+  ) {
+    return 'سادس';
+  }
+
+  // 5 (خامس)
+  if (
+    withoutSlashSection.includes('خامس') ||
+    withoutSlashSection.includes('الخامس') ||
+    /\b(5|05|g5|gr5|grade\s*5|صف\s*5|الصف\s*5)\b/i.test(withoutSlashSection)
+  ) {
+    return 'خامس';
+  }
+
+  // 4 (رابع)
+  if (
+    withoutSlashSection.includes('رابع') ||
+    withoutSlashSection.includes('الرابع') ||
+    /\b(4|04|g4|gr4|grade\s*4|صف\s*4|الصف\s*4)\b/i.test(withoutSlashSection)
+  ) {
+    return 'رابع';
+  }
+
+  // 3 (ثالث)
+  if (
+    withoutSlashSection.includes('ثالث') ||
+    withoutSlashSection.includes('الثالث') ||
+    /\b(3|03|g3|gr3|grade\s*3|صف\s*3|الصف\s*3)\b/i.test(withoutSlashSection)
+  ) {
+    return 'ثالث';
+  }
+
+  // 2 (ثاني)
+  if (
+    withoutSlashSection.includes('ثاني') ||
+    withoutSlashSection.includes('الثاني') ||
+    /\b(2|02|g2|gr2|grade\s*2|صف\s*2|الصف\s*2)\b/i.test(withoutSlashSection)
+  ) {
+    return 'ثاني';
+  }
+
+  // 1 (أول)
+  if (
+    withoutSlashSection.includes('اول') ||
+    withoutSlashSection.includes('الاول') ||
+    /\b(1|01|g1|gr1|grade\s*1|صف\s*1|الصف\s*1)\b/i.test(withoutSlashSection)
+  ) {
+    return 'أول';
+  }
+
+  const cleanedCustom = s.replace(/^(الصف|صف|grade|gr|g)\s+/i, '').trim();
+  if (cleanedCustom && cleanedCustom.length <= 30) {
+    return cleanedCustom as GradeLevel;
   }
 
   return null;
 }
 
 /**
- * Parses academic Section strictly (1, 2, 3, 4).
- * COMPLETELY DECOUPLED FROM TRACK AND GRADE.
- * Strips out any track keywords (e.g. 'متقدم', 'عام', 'advanced', 'general') and grade prefixes
- * so that Section is extracted strictly on its own merits.
+ * Parses academic Section strictly while preserving actual section names from the Academy data.
+ * Strips out track keywords and grade prefixes (for ALL grades 1-12 and Arabic grade names)
+ * so that Section is extracted accurately (e.g., '5/2' -> '2', 'الصف الخامس - 3' -> '3').
  */
 export function normalizeStrictSection(val: any): SectionName {
-  if (!val) return '1';
-  let s = String(val).trim().toLowerCase();
+  if (val === null || val === undefined) return 'غير محدد';
+  let s = String(val).trim();
+  if (!s) return 'غير محدد';
 
   // Convert all Arabic-Indic numerals
   s = s
@@ -516,22 +597,30 @@ export function normalizeStrictSection(val: any): SectionName {
   // 1. Strip all track words so they cannot interfere with section parsing
   s = s.replace(/(المسار\s*المتقدم|المسار\s*العام|المسار\s*النخبة|المسار\s*التطبيقي|متقدم|عام|نخبة|تطبيقي|advanced|general|elite|applied|adv|gen)/gi, '').trim();
 
-  // 2. Strip grade prefixes like '10/', '11/', '12/', '9/', 'G10-', 'الصف العاشر'
-  s = s.replace(/^(صف|الصف|grade|gr|g)?\s*(12|11|10|9|تاسع|عاشر|حادي عشر|ثاني عشر)[\s\/\-_:]+/i, '').trim();
-
-  // 3. Check for explicit pattern with keyword like "شعبة 5" or "section 5"
-  const secKeywordMatch = s.match(/(?:شعبة|فصل|sec|section)[\s:-]*([0-9]{1,2})/i);
-  if (secKeywordMatch) {
-    return secKeywordMatch[1] as SectionName;
-  }
-
-  // 4. Check for pattern like '10/5' or '9/2' -> take the section after the slash/dash
-  const slashMatch = s.match(/\b(?:9|10|11|12)\s*[\/\-_]\s*([0-9]{1,2})\b/);
+  // 2. Check for pattern like '5/2', '6-1', '10/5', 'G5-2' BEFORE stripping so we explicitly take the part AFTER the slash/dash
+  const slashMatch = s.match(/^(?:صف|الصف|grade|gr|g)?\s*(?:12|11|10|[1-9]|أول|اول|ثاني عشر|حادي عشر|عاشر|تاسع|ثامن|سابع|سادس|خامس|رابع|ثالث|ثاني)\s*[\/\-_:]\s*([0-9]{1,2}|[أ-ي]|[a-zA-Z])\b/i);
   if (slashMatch) {
-    return slashMatch[1] as SectionName;
+    const afterSlash = slashMatch[1].trim();
+    return normalizeSectionToken(afterSlash);
   }
 
-  // 5. Letter sections (أ = 1, ب = 2, ج = 3, د = 4, هـ/ه = 5, و = 6, ز = 7, ح = 8, ط = 9, ي = 10)
+  // 3. Strip grade prefixes like '10/', '5/', 'G5-', 'الصف الخامس', 'خامس'
+  s = s.replace(/^(صف|الصف|grade|gr|g)?\s*(12|11|10|[1-9]|الثاني عشر|ثاني عشر|الحادي عشر|حادي عشر|العاشر|عاشر|التاسع|تاسع|الثامن|ثامن|السابع|سابع|السادس|سادس|الخامس|خامس|الرابع|رابع|الثالث|ثالث|الثاني|ثاني|الأول|الاول|أول|اول)[\s\/\-_:]+/i, '').trim();
+
+  // 4. Check for explicit pattern with keyword like "شعبة 5" or "section 5" or "فصل أ"
+  const secKeywordMatch = s.match(/(?:شعبة|فصل|sec|section)[\s:\-_]*([0-9]{1,2}|[أ-ي]|[a-zA-Z])/i);
+  if (secKeywordMatch) {
+    return normalizeSectionToken(secKeywordMatch[1]);
+  }
+
+  return normalizeSectionToken(s);
+}
+
+function normalizeSectionToken(rawToken: string): SectionName {
+  const s = rawToken.trim().toLowerCase();
+  if (!s) return 'غير محدد';
+
+  // Letter sections (أ = 1, ب = 2, ج = 3, د = 4, هـ/ه = 5, و = 6, ز = 7, ح = 8, ط = 9, ي = 10)
   if (/\b(شعبة|فصل|sec|section)?\s*(10|ي|j)\b/i.test(s) || s === '10' || s === 'ي' || s === 'j') return '10';
   if (/\b(شعبة|فصل|sec|section)?\s*(9|ط|i)\b/i.test(s) || s === '9' || s === 'ط' || s === 'i') return '9';
   if (/\b(شعبة|فصل|sec|section)?\s*(8|ح|h)\b/i.test(s) || s === '8' || s === 'ح' || s === 'h') return '8';
@@ -541,28 +630,26 @@ export function normalizeStrictSection(val: any): SectionName {
   if (/\b(شعبة|فصل|sec|section)?\s*(4|د|d)\b/i.test(s) || s === '4' || s === 'د' || s === 'd') return '4';
   if (/\b(شعبة|فصل|sec|section)?\s*(3|ج|c)\b/i.test(s) || s === '3' || s === 'ج' || s === 'c') return '3';
   if (/\b(شعبة|فصل|sec|section)?\s*(2|ب|b)\b/i.test(s) || s === '2' || s === 'ب' || s === 'b') return '2';
-  if (/\b(شعبة|فصل|sec|section)?\s*(1|أ|a)\b/i.test(s) || s === '1' || s === 'أ' || s === 'a') return '1';
+  if (/\b(شعبة|فصل|sec|section)?\s*(1|أ|ا|a)\b/i.test(s) || s === '1' || s === 'أ' || s === 'ا' || s === 'a') return '1';
 
-  // 6. Look for any isolated number
+  // Isolated number
   const isolated = s.match(/\b([0-9]{1,2})\b/);
   if (isolated) {
-    return isolated[1] as SectionName;
+    return String(parseInt(isolated[1], 10)) as SectionName;
   }
 
-  // 7. Look for trailing digits
+  // Trailing digits
   const digits = s.match(/[0-9]+/g);
   if (digits && digits.length > 0) {
-    return digits[digits.length - 1] as SectionName;
+    return String(parseInt(digits[digits.length - 1], 10)) as SectionName;
   }
 
-  return '1';
+  return rawToken.trim() as SectionName;
 }
 
 /**
  * Parses academic Track from an explicit track column.
  * COMPLETELY DECOUPLED FROM SECTION NUMBER.
- * Section numbers (1, 2, 3, 4) NEVER determine whether a track is 'متقدم' or 'عام'.
- * Returns 'متقدم' | 'عام' if recognized, or null if empty/unrecognized.
  */
 export function parseExplicitTrack(val: any): AcademicTrack | null {
   if (!val) return null;
@@ -571,15 +658,19 @@ export function parseExplicitTrack(val: any): AcademicTrack | null {
 
   const norm = normalizeHeader(s);
 
+  if (norm.includes('نخبه') || norm.includes('نخبة') || norm.includes('elite')) {
+    return 'نخبة';
+  }
+  if (norm.includes('تطبيقي') || norm.includes('applied')) {
+    return 'تطبيقي';
+  }
+
   // Advanced / متقدم keywords
   if (
     norm.includes('متقدم') ||
     norm.includes('advanced') ||
     norm.includes('adv') ||
     norm.includes('علمي') ||
-    norm.includes('نخبه') ||
-    norm.includes('نخبة') ||
-    norm.includes('elite') ||
     norm.includes('asp')
   ) {
     return 'متقدم';
@@ -592,8 +683,9 @@ export function parseExplicitTrack(val: any): AcademicTrack | null {
     norm.includes('gen') ||
     norm.includes('ادبي') ||
     norm.includes('أدبي') ||
-    norm.includes('تطبيقي') ||
-    norm.includes('applied')
+    norm.includes('عادي') ||
+    norm.includes('وزاري') ||
+    norm.includes('اكاديمي')
   ) {
     return 'عام';
   }
@@ -603,22 +695,23 @@ export function parseExplicitTrack(val: any): AcademicTrack | null {
 
 /**
  * Fallback extraction of track keyword from Section or Grade string.
- * Used ONLY when explicit Track column is empty or missing.
- * CRITICAL RULE: Only searches for explicit text words ('متقدم', 'عام').
- * NEVER assumes or infers track from just a section digit (1, 2, 3, 4)!
  */
 export function extractTrackFromContext(sectionVal: any, gradeVal: any): AcademicTrack | null {
   const combined = `${sectionVal || ''} ${gradeVal || ''}`.toLowerCase();
   const norm = normalizeHeader(combined);
 
+  if (norm.includes('نخبه') || norm.includes('نخبة') || norm.includes('elite')) {
+    return 'نخبة';
+  }
+  if (norm.includes('تطبيقي') || norm.includes('applied')) {
+    return 'تطبيقي';
+  }
+
   if (
     norm.includes('متقدم') ||
     norm.includes('advanced') ||
     norm.includes('adv') ||
-    norm.includes('علمي') ||
-    norm.includes('نخبه') ||
-    norm.includes('نخبة') ||
-    norm.includes('elite')
+    norm.includes('علمي')
   ) {
     return 'متقدم';
   }
@@ -627,8 +720,7 @@ export function extractTrackFromContext(sectionVal: any, gradeVal: any): Academi
     norm.includes('عام') ||
     norm.includes('general') ||
     norm.includes('gen') ||
-    norm.includes('ادبي') ||
-    norm.includes('تطبيقي')
+    norm.includes('ادبي')
   ) {
     return 'عام';
   }
@@ -636,18 +728,22 @@ export function extractTrackFromContext(sectionVal: any, gradeVal: any): Academi
   return null;
 }
 
-/**
- * Strict Track Resolver:
- * 1. Primary: Explicit Track column value (100% independent of section).
- * 2. Fallback: Explicit track keyword in section/grade text ONLY if Track column is missing/empty.
- * 3. Never guess: If no explicit keyword exists, returns 'يحتاج مراجعة' for manual audit.
- */
-export function resolveStudentTrack(rawTrack: any, rawSection: any, rawGrade: any): AcademicTrack {
+export function resolveStudentTrack(rawTrack: any, rawSection: any, rawGrade: any, validGrade?: GradeLevel): AcademicTrack {
   const explicit = parseExplicitTrack(rawTrack);
   if (explicit) return explicit;
 
   const fallback = extractTrackFromContext(rawSection, rawGrade);
   if (fallback) return fallback;
+
+  const gradeToCheck = validGrade || normalizeStrictGrade(rawGrade);
+  const cycle1And2Grades = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن'];
+  if (gradeToCheck && cycle1And2Grades.includes(gradeToCheck)) {
+    return 'عام';
+  }
+
+  if (!rawTrack || !String(rawTrack).trim()) {
+    return 'عام';
+  }
 
   return 'يحتاج مراجعة';
 }
@@ -1089,8 +1185,10 @@ export function parseAlManhalFromMatrix(
       continue;
     }
 
-    // Validation 6: Grade validation (Must normalize to 9, 10, 11, 12 or تاسع، عاشر، إلخ)
-    const validGrade = normalizeStrictGrade(rawGrade) || 'تاسع'; // Fallback to 'تاسع' if grade column missing/unspecified
+    // Validation 6: Grade & Section extraction without dropping students or overwriting Grade 5-8 to 'تاسع'
+    const parsedGrade = normalizeStrictGrade(rawGrade);
+    const inferredGradeFromSection = !parsedGrade && rawSection ? normalizeStrictGrade(rawSection) : null;
+    const validGrade: GradeLevel = parsedGrade || inferredGradeFromSection || 'غير محدد';
 
     // Clean and canonicalize student number using standard normalizer
     const studentNumber = normalizeStudentNumber(rawStudentId);
@@ -1103,8 +1201,10 @@ export function parseAlManhalFromMatrix(
     seenStudentNumbers.add(studentNumber);
 
     // Section and Track are evaluated 100% independently
-    const validSection = normalizeStrictSection(rawSection);
-    const validTrack = resolveStudentTrack(rawTrack, rawSection, rawGrade);
+    const validSection = rawSection && String(rawSection).trim() ? normalizeStrictSection(rawSection) : 'غير محدد';
+    const validTrack = resolveStudentTrack(rawTrack, rawSection, rawGrade, validGrade);
+    const hasMissingGradeOrSection =
+      validGrade === 'غير محدد' || validSection === 'غير محدد' || !String(rawGrade || '').trim() || !String(rawSection || '').trim();
 
     // Multi-phone parsing
     const { primary: cleanedPhone, secondary: alternatePhone } = parsePhoneNumbers(rawPhone);
@@ -1150,6 +1250,10 @@ export function parseAlManhalFromMatrix(
       grade: validGrade,
       section: validSection,
       track: validTrack,
+      rawGrade: rawGrade || undefined,
+      rawSection: rawSection || undefined,
+      rawTrack: rawTrack || undefined,
+      hasMissingGradeOrSection,
       status: 'منتظم',
       enrollmentType: rawEnrollmentType,
       enrollmentDate: rawEnrollmentDate || new Date().toISOString().split('T')[0],

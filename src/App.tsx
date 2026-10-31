@@ -83,6 +83,8 @@ import {
   batchAddAbsencesLocal,
   deleteAbsenceLocal,
   getTardinessRecords,
+  saveTardinessRecordsLocal,
+  saveViolationsLocal,
   addTardinessRecordsBatch,
   deleteTardinessRecord,
   deleteTardinessRecordsBatch,
@@ -94,6 +96,14 @@ import {
   syncStudentFollowUpNotifications,
 } from './storage';
 import { getUaeTodayDateString } from './utils/time';
+import {
+  normalizeCanonicalGrade,
+  getUniqueStudentTardinessDates,
+} from './hooks/useAcademicFiltering';
+import {
+  processApprovedTardinessBatchNotifications,
+  processApprovedAbsenceBatchNotifications,
+} from './firebase/gmailNotificationService';
 
 // Shared Components
 import { Header } from './components/Header';
@@ -475,6 +485,7 @@ export default function App() {
       if (tdRes.status === 'fulfilled' && Array.isArray(tdRes.value)) {
         if (tdRes.value.length > 0) {
           setTardinessRecords(tdRes.value);
+          saveTardinessRecordsLocal(tdRes.value);
         } else {
           const localTardy = getTardinessRecords();
           if (localTardy && localTardy.length > 0) {
@@ -488,6 +499,9 @@ export default function App() {
       }
       if (viRes.status === 'fulfilled' && Array.isArray(viRes.value)) {
         setViolations(viRes.value);
+        if (viRes.value.length > 0) {
+          saveViolationsLocal(viRes.value);
+        }
       }
       if (wfRes.status === 'fulfilled' && Array.isArray(wfRes.value)) {
         setWarningForms(wfRes.value);
@@ -574,8 +588,8 @@ export default function App() {
     ).length;
     const pendingSignaturesCount = warningForms.filter((f) => !f.studentSignature).length;
     const criticalTardinessCount = students.filter((s) => {
-      const recordsCount = tardinessRecords.filter((t) => t.studentId === s.id).length;
-      return Math.max(s.totalTardiness || 0, recordsCount) >= 3;
+      const uniqueDatesCount = getUniqueStudentTardinessDates(s, tardinessRecords).length;
+      return Math.max(s.totalTardiness || 0, uniqueDatesCount) >= 3;
     }).length;
     const criticalAbsencesCount = students.filter((s) => {
       const recordsCount = absences.filter(
@@ -614,7 +628,13 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     try {
-      syncStudentFollowUpNotifications(students, violations, warningForms, tardinessRecords, absences);
+      syncStudentFollowUpNotifications({
+        students,
+        violations,
+        warningForms,
+        tardinessRecords,
+        absences,
+      });
     } catch (err) {
       console.warn('Follow-up notification sync notice:', err);
     }
@@ -669,11 +689,10 @@ export default function App() {
     const schoolId = activeSchoolId;
     try {
       const created = await saveStudent(schoolId, studentData, currentUser);
-      setStudents((prev) => {
-        const next = [...prev.filter((s) => s.id !== created.id && s.studentNumber !== created.studentNumber), created];
-        saveStudents(next);
-        return next;
-      });
+      setStudents((prev) => [
+        ...prev.filter((s) => s.id !== created.id && s.studentNumber !== created.studentNumber),
+        created,
+      ]);
       showToast(`تمت إضافة الطالب ${created.fullName} بنجاح إلى قاعدة البيانات`, 'success');
     } catch (err: any) {
       console.warn('handleAddStudent cloud notice, preserving locally:', err);
@@ -683,52 +702,49 @@ export default function App() {
         totalTardiness: 0,
         totalViolations: 0,
       };
-      setStudents((prev) => {
-        const next = [...prev.filter((s) => s.id !== localRecord.id && s.studentNumber !== localRecord.studentNumber), localRecord];
-        saveStudents(next);
-        return next;
-      });
+      setStudents((prev) => [
+        ...prev.filter((s) => s.id !== localRecord.id && s.studentNumber !== localRecord.studentNumber),
+        localRecord,
+      ]);
       showToast(`تم حفظ الطالب ${localRecord.fullName} محلياً بنجاح`, 'info');
     }
   };
 
-  // Helpers to strictly validate and normalize student grade, section, and track
+  // Helpers to validate and normalize student grade, section, and track across all grades (5-12 and 1-12)
   const getGradeCode = (grade: GradeLevel): string => {
     switch (grade) {
+      case 'أول': return '01';
+      case 'ثاني': return '02';
+      case 'ثالث': return '03';
+      case 'رابع': return '04';
+      case 'خامس': return '05';
+      case 'سادس': return '06';
+      case 'سابع': return '07';
+      case 'ثامن': return '08';
       case 'تاسع': return '09';
       case 'عاشر': return '10';
       case 'حادي عشر': return '11';
       case 'ثاني عشر': return '12';
-      default: return '10';
+      default: return '00';
     }
   };
 
   const normalizeStrictGrade = (raw: any): GradeLevel => {
-    const g = String(raw || '').trim().toLowerCase();
-    if (!g) return 'عاشر';
-    if (g.includes('تاسع') || g.includes('صف 9') || g.includes('grade 9') || g.includes('gr 9') || g === '9' || g.endsWith('/9') || g.startsWith('9/')) return 'تاسع';
-    if (g.includes('ثاني عشر') || g.includes('صف 12') || g.includes('grade 12') || g.includes('gr 12') || g === '12' || g.endsWith('/12') || g.startsWith('12/')) return 'ثاني عشر';
-    if (g.includes('حادي عشر') || g.includes('صف 11') || g.includes('grade 11') || g.includes('gr 11') || g === '11' || g.endsWith('/11') || g.startsWith('11/')) return 'حادي عشر';
-    if (g.includes('عاشر') || g.includes('صف 10') || g.includes('grade 10') || g.includes('gr 10') || g === '10' || g.endsWith('/10') || g.startsWith('10/')) return 'عاشر';
-    return 'عاشر';
+    return normalizeCanonicalGrade(raw);
   };
 
   const normalizeStrictSection = (raw: any): SectionName => {
-    const s = String(raw || '').trim().toLowerCase();
-    if (!s) return '1';
-    const num = s.replace(/[^\d]/g, '');
-    if (num) return num as SectionName;
-    if (s.includes('د') || s.includes('d')) return '4';
-    if (s.includes('ج') || s.includes('c')) return '3';
-    if (s.includes('ب') || s.includes('b')) return '2';
-    if (s.includes('أ') || s.includes('a')) return '1';
-    return s || '1';
+    const s = String(raw || '').trim();
+    if (!s) return 'غير محدد';
+    return s as SectionName;
   };
 
   const normalizeStrictTrack = (raw: any): AcademicTrack => {
     const t = String(raw || '').trim().toLowerCase();
+    if (t.includes('نخبة') || t.includes('نخبه') || t.includes('elite')) return 'نخبة';
+    if (t.includes('تطبيقي') || t.includes('applied')) return 'تطبيقي';
     if (t.includes('متقدم') || t.includes('advanced') || t.includes('adv')) return 'متقدم';
-    if (t.includes('عام') || t.includes('general') || t.includes('gen')) return 'عام';
+    if (t.includes('عام') || t.includes('general') || t.includes('gen') || !t) return 'عام';
     return 'يحتاج مراجعة';
   };
 
@@ -797,9 +813,9 @@ export default function App() {
           totalViolations: existing?.totalViolations ?? 0,
         });
       });
-      const next = Array.from(map.values());
-      saveStudents(next);
-      return next;
+      const updated = Array.from(map.values());
+      saveStudents(updated);
+      return updated;
     });
 
     // 3. Persist accurately to Firestore in disciplined batches
@@ -868,11 +884,7 @@ export default function App() {
       const schoolId = activeSchoolId;
       const result = await deleteImportBatch(schoolId, batchId, currentUser);
       // Remove deleted students from state and local storage
-      setStudents((prev) => {
-        const next = prev.filter((s) => s.importBatchId !== batchId);
-        saveStudents(next);
-        return next;
-      });
+      setStudents((prev) => prev.filter((s) => s.importBatchId !== batchId));
       showToast(`تم حذف دفعة الاستيراد (${batchId}) بعدد ${result.deletedCount} طالب بنجاح`, 'success');
       return true;
     } catch (err: any) {
@@ -892,18 +904,14 @@ export default function App() {
     try {
       const schoolId = activeSchoolId;
       await updateStudentRecord(schoolId, studentId, updates, currentUser);
-      setStudents((prev) => {
-        const next = prev.map((s) => (s.id === studentId || s.studentNumber === studentId ? { ...s, ...updates } : s));
-        saveStudents(next);
-        return next;
-      });
+      setStudents((prev) =>
+        prev.map((s) => (s.id === studentId || s.studentNumber === studentId ? { ...s, ...updates } : s))
+      );
       showToast('تم تحديث بيانات وسجل الطالب بنجاح', 'success');
     } catch (err: any) {
-      setStudents((prev) => {
-        const next = prev.map((s) => (s.id === studentId || s.studentNumber === studentId ? { ...s, ...updates } : s));
-        saveStudents(next);
-        return next;
-      });
+      setStudents((prev) =>
+        prev.map((s) => (s.id === studentId || s.studentNumber === studentId ? { ...s, ...updates } : s))
+      );
       showToast('تم حفظ التعديل محلياً في سجل الطلبة', 'info');
     }
   };
@@ -972,14 +980,14 @@ export default function App() {
       await deleteStudent(schoolId, studentId, currentUser, studentName);
       setStudents((prev) => {
         const next = prev.filter((s) => s.id !== studentId && s.studentNumber !== studentId);
-        saveStudents(next);
+        if (next.length === 0) saveStudents([]);
         return next;
       });
       showToast(`تم حذف سجل الطالب (${studentName}) نهائياً من النظام`, 'info');
     } catch (err: any) {
       setStudents((prev) => {
         const next = prev.filter((s) => s.id !== studentId && s.studentNumber !== studentId);
-        saveStudents(next);
+        if (next.length === 0) saveStudents([]);
         return next;
       });
       showToast(`تم حذف سجل الطالب (${studentName}) محلياً`, 'info');
@@ -1020,18 +1028,10 @@ export default function App() {
     const idSet = new Set(studentIds);
     try {
       await deleteStudentsBatch(schoolId, studentIds, currentUser, summary);
-      setStudents((prev) => {
-        const remaining = prev.filter((s) => !idSet.has(s.id));
-        saveStudents(remaining);
-        return remaining;
-      });
+      setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
       showToast(`تم ${summary} بنجاح بعدد (${studentIds.length}) طالباً.`, 'success');
     } catch (err: any) {
-      setStudents((prev) => {
-        const remaining = prev.filter((s) => !idSet.has(s.id));
-        saveStudents(remaining);
-        return remaining;
-      });
+      setStudents((prev) => prev.filter((s) => !idSet.has(s.id)));
       showToast(`تم حذف الطلبة المحددين محلياً (${studentIds.length}) طالباً.`, 'info');
     }
   };
@@ -1050,17 +1050,41 @@ export default function App() {
     try {
       const res = await batchAddMorningDelays(schoolId, batch, currentUser);
       if (res.savedRecords.length > 0) {
-        setTardinessRecords((prev) => [...res.savedRecords, ...prev]);
-        const numSet = new Set(res.savedRecords.map((r) => r.studentNumber || r.studentId));
-        setStudents((prev) =>
-          prev.map((s) => (numSet.has(s.studentNumber) || numSet.has(s.id) ? { ...s, totalTardiness: (s.totalTardiness || 0) + 1 } : s))
-        );
+        const nextTardiness = [...res.savedRecords, ...tardinessRecords];
+        setTardinessRecords(nextTardiness);
+        saveTardinessRecordsLocal(nextTardiness);
+        const numSet = new Set(res.savedRecords.map((r) => String(r.studentNumber || r.studentId || '').trim()));
+        setStudents((prev) => {
+          const updated = prev.map((s) => {
+            if (numSet.has(s.studentNumber) || numSet.has(s.id)) {
+              const uniqueDatesCount = getUniqueStudentTardinessDates(s, nextTardiness).length;
+              return { ...s, totalTardiness: uniqueDatesCount };
+            }
+            return s;
+          });
+          saveStudents(updated);
+          return updated;
+        });
+
+        // Enqueue & dispatch automated Gmail notifications for newly approved tardiness incidents
+        processApprovedTardinessBatchNotifications({
+          schoolId,
+          savedRecords: res.savedRecords,
+          students,
+          approver: {
+            uid: currentUser.uid,
+            name: currentUser.fullName,
+            role: currentUser.role,
+          },
+        }).catch((err) => console.warn('[Gmail Auto-Tardiness] Notice:', err));
       }
       return res;
     } catch (err: any) {
       console.warn('Batch add morning delays fallback local:', err);
       const localRes = addTardinessRecordsBatch(batch);
-      setTardinessRecords(getTardinessRecords());
+      const latestTardy = getTardinessRecords();
+      setTardinessRecords(latestTardy);
+      setStudents(getStudents());
       return {
         successCount: localRes.successCount,
         duplicateCount: localRes.duplicatesCount,
@@ -1229,6 +1253,18 @@ export default function App() {
         setStudents((prev) =>
           prev.map((s) => (numSet.has(s.studentNumber) ? { ...s, totalAbsences: (s.totalAbsences || 0) + 1 } : s))
         );
+
+        // Enqueue & dispatch automated Gmail notifications for newly approved absence incidents
+        processApprovedAbsenceBatchNotifications({
+          schoolId,
+          savedRecords: res.savedRecords,
+          students,
+          approver: {
+            uid: currentUser.uid,
+            name: currentUser.fullName,
+            role: currentUser.role,
+          },
+        }).catch((err) => console.warn('[Gmail Auto-Absence] Notice:', err));
       }
       return res;
     } catch (err: any) {
@@ -1304,9 +1340,11 @@ export default function App() {
     try {
       const schoolId = activeSchoolId;
       const created = await addViolation(schoolId, v, currentUser);
-      setViolations((prev) => [created, ...prev]);
-      setStudents((prev) =>
-        prev.map((s) =>
+      const nextViolations = [created, ...violations];
+      setViolations(nextViolations);
+      saveViolationsLocal(nextViolations);
+      setStudents((prev) => {
+        const updated = prev.map((s) =>
           s.id === v.studentId || (Boolean(v.studentNumber) && s.studentNumber === v.studentNumber)
             ? {
                 ...s,
@@ -1314,8 +1352,10 @@ export default function App() {
                 status: s.status === 'منتظم' ? 'متابع سلوكيًا' : s.status,
               }
             : s
-        )
-      );
+        );
+        saveStudents(updated);
+        return updated;
+      });
       try {
         notifyInfractionLogged(created);
       } catch {}
@@ -1342,12 +1382,13 @@ export default function App() {
       deleteViolationLocal(violationId);
       const remaining = violations.filter((item) => item.id !== violationId);
       setViolations(remaining);
+      saveViolationsLocal(remaining);
       if (studentNumber || studentId) {
         const realViolationsCount = remaining.filter(
           (v) => (studentId && v.studentId === studentId) || (studentNumber && v.studentNumber === studentNumber)
         ).length;
-        setStudents((prev) =>
-          prev.map((s) =>
+        setStudents((prev) => {
+          const updated = prev.map((s) =>
             (studentId && s.id === studentId) || (studentNumber && s.studentNumber === studentNumber)
               ? {
                   ...s,
@@ -1355,8 +1396,10 @@ export default function App() {
                   status: realViolationsCount === 0 && s.status === 'متابع سلوكيًا' ? 'منتظم' : s.status,
                 }
               : s
-          )
-        );
+          );
+          saveStudents(updated);
+          return updated;
+        });
       }
       showToast('تم حذف المخالفة وتحديث رصيد مخالفات الطالب بنجاح', 'info');
     } catch (err: any) {
@@ -1374,7 +1417,9 @@ export default function App() {
     try {
       const schoolId = activeSchoolId;
       await updateViolation(schoolId, v, currentUser);
-      setViolations((prev) => prev.map((item) => (item.id === v.id ? v : item)));
+      const nextViolations = violations.map((item) => (item.id === v.id ? v : item));
+      setViolations(nextViolations);
+      saveViolationsLocal(nextViolations);
       showToast('تم تحديث حالة المخالفة بنجاح', 'success');
     } catch (err: any) {
       showToast(err.message || 'فشل تحديث المخالفة', 'error');
@@ -1923,6 +1968,9 @@ export default function App() {
                 {currentTab === 'students' && (
                   <StudentsPage
                     students={students}
+                    tardinessRecords={tardinessRecords}
+                    violations={violations}
+                    absences={absences}
                     onOpenProfile={(id) => setActiveProfileStudentId(id)}
                     onOpenAddModal={() => setIsAddStudentOpen(true)}
                     onOpenImportModal={() => setIsImportOpen(true)}
@@ -2081,6 +2129,8 @@ export default function App() {
                   <MessagesPage
                     students={students}
                     violations={violations}
+                    absences={absences}
+                    tardinessRecords={tardinessRecords}
                     schoolId={activeSchoolId}
                     currentUser={currentUser ? {
                       uid: currentUser.uid,
@@ -2091,6 +2141,8 @@ export default function App() {
                     initialStudentId={selectedStudentIdForMessage}
                     initialSelectedStudentIds={selectedStudentIdsForMessage}
                     initialSelectedViolationIds={selectedViolationIdsForMessage}
+                    onClearInitialViolations={() => setSelectedViolationIdsForMessage([])}
+                    onOpenStudentProfile={(id) => setActiveProfileStudentId(id)}
                     queueItems={messageQueue}
                     onQueueItemsChange={setMessageQueue}
                   />
@@ -2149,6 +2201,8 @@ export default function App() {
                   <SettingsPage
                     currentUser={counselorAdapter}
                     students={students}
+                    violations={violations}
+                    onOpenStudentProfile={(id) => setActiveProfileStudentId(id)}
                     onNavigateTab={handleNavigateTab}
                     onOpenUsersManagement={() => {
                       if (canManageUsers) setCurrentTab('users');
@@ -2270,8 +2324,13 @@ export default function App() {
       <StudentProfileModal
         isOpen={Boolean(activeProfileStudentId)}
         student={activeProfileStudent}
+        tardinessRecords={tardinessRecords}
         violations={violations}
         absences={absences}
+        warningForms={warningForms}
+        parentSummonForms={parentSummonForms}
+        violationReports={violationReports}
+        parentNoticeForms={parentNoticeForms}
         onRegisterViolationForStudent={(studentId) => {
           setActiveProfileStudentId(null);
           setPreselectedStudentIdForViolation(studentId);
@@ -2336,6 +2395,12 @@ export default function App() {
         onDeleteAllStudents={handleDeleteAllStudents}
         onDeleteFilteredStudents={handleDeleteFilteredStudents}
         isViewer={isViewer}
+        currentUser={currentUser}
+        schoolId={activeSchoolId}
+        onRefreshData={() => {
+          if (currentUser) loadFirestoreData(currentUser, activeSchoolId);
+        }}
+        onShowToast={showToast}
       />
 
       {/* 5.5 Track Review & Correction Modal */}

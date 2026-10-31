@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   UserCheck,
@@ -11,6 +11,12 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Student, GradeLevel, SectionName, AcademicTrack } from '../types';
+import {
+  ALL_SUPPORTED_GRADES,
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+} from '../hooks/useAcademicFiltering';
 
 interface EditStudentModalProps {
   isOpen: boolean;
@@ -31,7 +37,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [studentNumber, setStudentNumber] = useState('');
-  const [grade, setGrade] = useState<GradeLevel>('تاسع');
+  const [grade, setGrade] = useState<GradeLevel>('خامس');
   const [section, setSection] = useState<SectionName>('1');
   const [track, setTrack] = useState<AcademicTrack>('عام');
   const [parentName, setParentName] = useState('');
@@ -47,7 +53,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
     if (student) {
       setFullName(student.fullName || '');
       setStudentNumber(student.studentNumber || '');
-      setGrade(student.grade || 'تاسع');
+      setGrade(student.grade || 'خامس');
       setSection(student.section || '1');
       setTrack(student.track || 'عام');
       setParentName(student.parentName || '');
@@ -58,6 +64,12 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
       setErrorMsg('');
     }
   }, [student, isOpen]);
+
+  const gradeOptions = useMemo(() => {
+    const set = new Set<string>(ALL_SUPPORTED_GRADES);
+    if (student?.grade) set.add(student.grade);
+    return Array.from(set).sort(compareGrades);
+  }, [student]);
 
   if (!isOpen || !student) return null;
 
@@ -79,6 +91,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
         grade,
         section,
         track,
+        hasMissingGradeOrSection: grade === 'غير محدد' || section === 'غير محدد',
         parentName: parentName.trim(),
         parentPhone: parentPhone.trim(),
         parentRelation: parentRelation.trim(),
@@ -183,10 +196,11 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 disabled={isViewer}
                 className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold bg-white focus:outline-hidden"
               >
-                <option value="تاسع">تاسع</option>
-                <option value="عاشر">عاشر</option>
-                <option value="حادي عشر">حادي عشر</option>
-                <option value="ثاني عشر">ثاني عشر</option>
+                {gradeOptions.map((g) => (
+                  <option key={g} value={g}>
+                    {getGradeDisplayLabel(g)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -198,8 +212,8 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 disabled={isViewer}
                 className="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold bg-white focus:outline-hidden"
               >
-                {Array.from(new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', String(student.section || '1')]))
-                  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+                {Array.from(new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'أ', 'ب', 'ج', 'A', 'B', String(student.section || '1')]))
+                  .sort(compareSections)
                   .map((sec) => (
                     <option key={sec} value={sec}>
                       شعبة {sec}
@@ -220,6 +234,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 <option value="متقدم">متقدم</option>
                 <option value="نخبة">نخبة</option>
                 <option value="تطبيقي">تطبيقي</option>
+                <option value="بدون مسار">بدون مسار</option>
               </select>
             </div>
 

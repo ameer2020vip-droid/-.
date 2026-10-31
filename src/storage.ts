@@ -109,7 +109,9 @@ export const STORAGE_EVENT_NAME = 'alkhalil_counselor_storage_updated';
 
 function notifyStorageChange() {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event(STORAGE_EVENT_NAME));
+    setTimeout(() => {
+      window.dispatchEvent(new Event(STORAGE_EVENT_NAME));
+    }, 0);
   }
 }
 
@@ -411,6 +413,11 @@ export function getTardinessRecords(): TardinessRecord[] {
 
 export const getMorningDelays = getTardinessRecords;
 
+export function saveTardinessRecordsLocal(records: TardinessRecord[]): void {
+  localStorage.setItem(STORAGE_KEYS.TARDINESS, JSON.stringify(records));
+  notifyStorageChange();
+}
+
 export function isStudentTardyToday(studentId: string, dateStr?: string): boolean {
   const targetDate = dateStr || getUaeTodayDateString();
   const records = getTardinessRecords();
@@ -421,7 +428,13 @@ export function isStudentTardyToday(studentId: string, dateStr?: string): boolea
 
 export function getStudentPastTardinessCount(studentId: string): number {
   const records = getTardinessRecords();
-  return records.filter((r) => r.studentId === studentId || r.studentNumber === studentId).length;
+  const uniqueDates = new Set(
+    records
+      .filter((r) => r.studentId === studentId || r.studentNumber === studentId)
+      .map((r) => String(r.date || '').trim())
+      .filter(Boolean)
+  );
+  return uniqueDates.size;
 }
 
 export function addTardinessRecordsBatch(
@@ -434,36 +447,49 @@ export function addTardinessRecordsBatch(
   let successCount = 0;
   let duplicatesCount = 0;
   const createdRecords: TardinessRecord[] = [];
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
 
   for (const rec of newRecordsData) {
-    // Check duplication for same day
-    const alreadyLoggedToday = existingRecords.some(
-      (r) => r.studentId === rec.studentId && r.date === today
+    const targetDate = rec.date || today;
+    const sNum = String(rec.studentNumber || rec.studentId || '').trim();
+    const alreadyLoggedOnDate = existingRecords.some(
+      (r) => (r.studentId === rec.studentId || (sNum && r.studentNumber === sNum)) && r.date === targetDate
     );
 
-    if (alreadyLoggedToday) {
+    if (alreadyLoggedOnDate) {
       duplicatesCount++;
       continue;
     }
 
     const created: TardinessRecord = {
       ...rec,
-      id: `tard-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      timestamp: Date.now(),
+      id: `tard-${now}-${Math.random().toString(36).substr(2, 5)}`,
+      studentId: sNum || rec.studentId,
+      studentNumber: sNum || rec.studentNumber,
+      timestamp: now,
+      createdAt: rec.createdAt || nowIso,
     };
 
     createdRecords.push(created);
     existingRecords.unshift(created);
     successCount++;
-
-    // Update student totalTardiness count in students list
-    const studentIdx = students.findIndex((s) => s.id === rec.studentId);
-    if (studentIdx !== -1) {
-      students[studentIdx].totalTardiness = (students[studentIdx].totalTardiness || 0) + 1;
-    }
   }
 
   if (successCount > 0) {
+    // Update student totalTardiness count from unique dates
+    for (let i = 0; i < students.length; i++) {
+      const s = students[i];
+      const uniqueDates = new Set(
+        existingRecords
+          .filter((r) => (s.studentNumber && r.studentNumber === s.studentNumber) || (s.id && r.studentId === s.id))
+          .map((r) => String(r.date || '').trim())
+          .filter(Boolean)
+      );
+      if (uniqueDates.size > 0 || s.totalTardiness) {
+        students[i].totalTardiness = uniqueDates.size;
+      }
+    }
     localStorage.setItem(STORAGE_KEYS.TARDINESS, JSON.stringify(existingRecords));
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
     notifyStorageChange();
@@ -480,16 +506,19 @@ export function deleteTardinessRecord(recordId: string): boolean {
   const filtered = records.filter((r) => r.id !== recordId);
   localStorage.setItem(STORAGE_KEYS.TARDINESS, JSON.stringify(filtered));
 
-  // Recalculate true totalTardiness for student from remaining records
+  // Recalculate true totalTardiness for student from remaining unique dates
   const students = getStudents();
   const studentIdx = students.findIndex((s) => s.id === target.studentId || (target.studentNumber && s.studentNumber === target.studentNumber));
   if (studentIdx !== -1) {
     const studentNum = students[studentIdx].studentNumber;
     const studentId = students[studentIdx].id;
-    const remainingCount = filtered.filter(
-      (r) => (studentNum && r.studentNumber === studentNum) || (studentId && r.studentId === studentId)
-    ).length;
-    students[studentIdx].totalTardiness = remainingCount;
+    const uniqueDates = new Set(
+      filtered
+        .filter((r) => (studentNum && r.studentNumber === studentNum) || (studentId && r.studentId === studentId))
+        .map((r) => String(r.date || '').trim())
+        .filter(Boolean)
+    );
+    students[studentIdx].totalTardiness = uniqueDates.size;
     localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
   }
 
@@ -505,7 +534,7 @@ export function deleteTardinessRecordsBatch(recordIds: string[]): { deletedCount
   const remaining = records.filter((r) => !idSet.has(r.id));
   localStorage.setItem(STORAGE_KEYS.TARDINESS, JSON.stringify(remaining));
 
-  // Recalculate exact totalTardiness for affected students
+  // Recalculate exact totalTardiness for affected students from unique dates
   const affectedStudentNumbers = new Set(targets.map((t) => t.studentNumber || t.studentId));
   const students = getStudents();
   const studentNewCounts: Record<string, number> = {};
@@ -513,9 +542,13 @@ export function deleteTardinessRecordsBatch(recordIds: string[]): { deletedCount
   for (let i = 0; i < students.length; i++) {
     const s = students[i];
     if (affectedStudentNumbers.has(s.studentNumber) || affectedStudentNumbers.has(s.id)) {
-      const remainingCount = remaining.filter(
-        (r) => (s.studentNumber && r.studentNumber === s.studentNumber) || (s.id && r.studentId === s.id)
-      ).length;
+      const uniqueDates = new Set(
+        remaining
+          .filter((r) => (s.studentNumber && r.studentNumber === s.studentNumber) || (s.id && r.studentId === s.id))
+          .map((r) => String(r.date || '').trim())
+          .filter(Boolean)
+      );
+      const remainingCount = uniqueDates.size;
       students[i].totalTardiness = remainingCount;
       studentNewCounts[s.studentNumber] = remainingCount;
     }
@@ -668,6 +701,11 @@ export function getViolations(): ViolationRecord[] {
   } catch {
     return [];
   }
+}
+
+export function saveViolationsLocal(violations: ViolationRecord[]): void {
+  localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(violations));
+  notifyStorageChange();
 }
 
 export function addViolation(
@@ -1036,18 +1074,28 @@ export function calculateDeterministicTimestamp(dateStr?: string, timeStr?: stri
 export function getStudentTimeline(
   studentId: string,
   customSources?: {
+    studentNumber?: string;
     absences?: AbsenceRecord[];
     violations?: ViolationRecord[];
     tardinessRecords?: TardinessRecord[];
+    warningForms?: WarningFormRecord[];
+    parentSummonForms?: ParentSummonFormRecord[];
+    violationReports?: ViolationReportRecord[];
+    parentNoticeForms?: ParentNoticeFormRecord[];
   }
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
+  const allStudents = getStudents();
+  const matchedStudent = allStudents.find((s) => s.id === studentId || s.studentNumber === studentId);
+  const stuNum = (customSources?.studentNumber || matchedStudent?.studentNumber || '').trim();
+  const matchesStudent = (r: { studentId?: string; studentNumber?: string }) =>
+    r.studentId === studentId ||
+    r.studentNumber === studentId ||
+    Boolean(stuNum && (String(r.studentNumber || '').trim() === stuNum || String(r.studentId || '').trim() === stuNum));
 
   // 1. Absence records (غياب يوم دراسي كامل - لا يُعرض وقت افتراضي ما لم يكن موثقاً حقيقة)
-  const rawAbsences = customSources?.absences ?? getAbsences();
-  const absenceRecords = rawAbsences.filter(
-    (r) => r.studentId === studentId || r.studentNumber === studentId
-  );
+  const rawAbsences = customSources?.absences && customSources.absences.length > 0 ? customSources.absences : getAbsences();
+  const absenceRecords = rawAbsences.filter(matchesStudent);
   for (const a of absenceRecords) {
     const rawTime = (a as any).time || (a as any).recordedTime;
     const hasReal = isRealDocumentedTime(rawTime);
@@ -1079,10 +1127,8 @@ export function getStudentTimeline(
   }
 
   // 2. Tardiness records (سجلات التأخير الصباحي المستقلة)
-  const rawTardies = customSources?.tardinessRecords ?? getTardinessRecords();
-  const tardinessRecords = rawTardies.filter(
-    (r) => r.studentId === studentId || r.studentNumber === studentId
-  );
+  const rawTardies = customSources?.tardinessRecords && customSources.tardinessRecords.length > 0 ? customSources.tardinessRecords : getTardinessRecords();
+  const tardinessRecords = rawTardies.filter(matchesStudent);
   for (const t of tardinessRecords) {
     const hasReal = isRealDocumentedTime(t.time);
     const occurrenceCount = (t.previousTardinessCount ?? 0) + 1;
@@ -1110,10 +1156,8 @@ export function getStudentTimeline(
   }
 
   // 3. Violations (المخالفات السلوكية المستقلة)
-  const rawViolations = customSources?.violations ?? getViolations();
-  const violations = rawViolations.filter(
-    (v) => v.studentId === studentId || v.studentNumber === studentId
-  );
+  const rawViolations = customSources?.violations && customSources.violations.length > 0 ? customSources.violations : getViolations();
+  const violations = rawViolations.filter(matchesStudent);
   for (const v of violations) {
     const timeMatch = v.incidentDateTime?.match(/\b\d{1,2}:\d{2}\b/);
     const hasReal = Boolean(timeMatch);
@@ -1142,9 +1186,8 @@ export function getStudentTimeline(
   }
 
   // 4. Warning Forms (نموذج 9 - تنبيه خطي للطالب وتعهد سلوكي)
-  const warningForms = getWarningForms().filter(
-    (w) => w.studentId === studentId || w.studentNumber === studentId
-  );
+  const rawWarnings = customSources?.warningForms && customSources.warningForms.length > 0 ? customSources.warningForms : getWarningForms();
+  const warningForms = rawWarnings.filter(matchesStudent);
   for (const w of warningForms) {
     const studentSigned = Boolean(w.studentSignature);
     const sigStatusText = studentSigned
@@ -1192,9 +1235,8 @@ export function getStudentTimeline(
   }
 
   // 5. Parent Summon Forms (نموذج 8 - خطاب استدعاء ولي الأمر)
-  const summonForms = getParentSummonForms().filter(
-    (s) => s.studentId === studentId || s.studentNumber === studentId
-  );
+  const rawSummons = customSources?.parentSummonForms && customSources.parentSummonForms.length > 0 ? customSources.parentSummonForms : getParentSummonForms();
+  const summonForms = rawSummons.filter(matchesStudent);
   for (const s of summonForms) {
     const studentSigned = Boolean(s.studentSignature || s.status === 'تم الاستلام والتوقيع');
     const sigStatusText = studentSigned
@@ -1244,9 +1286,8 @@ export function getStudentTimeline(
   }
 
   // 6. Violation Reports (نموذج 6 - تقرير مخالفة سلوكية)
-  const violationReports = getViolationReports().filter(
-    (vr) => vr.studentId === studentId || vr.studentNumber === studentId
-  );
+  const rawReports = customSources?.violationReports && customSources.violationReports.length > 0 ? customSources.violationReports : getViolationReports();
+  const violationReports = rawReports.filter(matchesStudent);
   for (const vr of violationReports) {
     const studentSigned = Boolean(vr.signatures?.student?.signatureImage || vr.studentSignature);
     const isApproved = vr.status === 'معتمد';
@@ -1297,9 +1338,8 @@ export function getStudentTimeline(
   }
 
   // 7. Parent Notice Forms (نموذج 7 - إخطار ولي أمر بحسم درجات)
-  const noticeForms = getParentNoticeForms().filter(
-    (n) => n.studentId === studentId || n.studentNumber === studentId
-  );
+  const rawNotices = customSources?.parentNoticeForms && customSources.parentNoticeForms.length > 0 ? customSources.parentNoticeForms : getParentNoticeForms();
+  const noticeForms = rawNotices.filter(matchesStudent);
   for (const n of noticeForms) {
     const parentSigned = Boolean(n.parentSignature || n.status === 'معتمد ومسلّم');
     const sigStatusText = parentSigned
@@ -1341,9 +1381,7 @@ export function getStudentTimeline(
   }
 
   // 8. Parent Commitment Forms (نموذج 10 - تعهد ولي أمر بحال تكرار المخالفات)
-  const commitmentForms = getParentCommitmentForms().filter(
-    (c) => c.studentId === studentId || c.studentNumber === studentId
-  );
+  const commitmentForms = getParentCommitmentForms().filter(matchesStudent);
   for (const c of commitmentForms) {
     const parentSigned = Boolean(c.parentSignature || c.status === 'معتمد ومسلّم');
     const sigStatusText = parentSigned
@@ -1383,9 +1421,7 @@ export function getStudentTimeline(
   }
 
   // 9. Attendance Commitments (نموذج 27 - تعهد خطي بالمواظبة والالتزام بالدوام)
-  const attendanceCommitments = getAttendanceCommitments().filter(
-    (att) => att.studentId === studentId || att.studentNumber === studentId
-  );
+  const attendanceCommitments = getAttendanceCommitments().filter(matchesStudent);
   for (const att of attendanceCommitments) {
     const parentSigned = Boolean(att.parentSignature || att.status === 'معتمد ومسلّم');
     const sigStatusText = parentSigned
@@ -1426,9 +1462,7 @@ export function getStudentTimeline(
   }
 
   // 9b. Temporary Suspension Forms (نموذج 12 - قرار إيقاف مؤقت من الدراسة)
-  const suspensionForms = getTemporarySuspensionForms().filter(
-    (sus) => sus.studentId === studentId || sus.studentNumber === studentId
-  );
+  const suspensionForms = getTemporarySuspensionForms().filter(matchesStudent);
   for (const sus of suspensionForms) {
     const isApproved = sus.status === 'معتمد ومسلّم';
     const isSigned = Boolean(sus.principalSignature || sus.studentSignature || isApproved);
@@ -4434,7 +4468,9 @@ export const COUNSELOR_NOTIFICATION_EVENT = 'alkhalil_counselor_notifications_up
 
 function dispatchNotificationEvent() {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event(COUNSELOR_NOTIFICATION_EVENT));
+    setTimeout(() => {
+      window.dispatchEvent(new Event(COUNSELOR_NOTIFICATION_EVENT));
+    }, 0);
   }
 }
 
@@ -4656,14 +4692,30 @@ export function notifyInfractionLogged(violation: ViolationRecord): CounselorNot
  * and scheduled counseling follow-ups to generate temporary Local Storage notifications
  * for due follow-ups that haven't been acknowledged yet.
  */
-export function syncStudentFollowUpNotifications(params: {
-  students: Student[];
-  violations: ViolationRecord[];
-  warningForms: WarningFormRecord[];
-  tardinessRecords?: TardinessRecord[];
-  absences?: AbsenceRecord[];
-}): CounselorNotification[] {
-  const { students, violations, warningForms } = params;
+export function syncStudentFollowUpNotifications(
+  paramsOrStudents:
+    | {
+        students: Student[];
+        violations: ViolationRecord[];
+        warningForms: WarningFormRecord[];
+        tardinessRecords?: TardinessRecord[];
+        absences?: AbsenceRecord[];
+      }
+    | Student[],
+  violationsArg?: ViolationRecord[],
+  warningFormsArg?: WarningFormRecord[],
+  _tardinessRecordsArg?: TardinessRecord[],
+  _absencesArg?: AbsenceRecord[]
+): CounselorNotification[] {
+  const students = Array.isArray(paramsOrStudents)
+    ? paramsOrStudents
+    : paramsOrStudents?.students || [];
+  const violations = Array.isArray(paramsOrStudents)
+    ? violationsArg || []
+    : paramsOrStudents?.violations || [];
+  const warningForms = Array.isArray(paramsOrStudents)
+    ? warningFormsArg || []
+    : paramsOrStudents?.warningForms || [];
   if (!students || students.length === 0) return getCounselorNotifications();
 
   const existing = getCounselorNotifications();

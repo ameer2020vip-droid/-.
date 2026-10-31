@@ -1,6 +1,404 @@
 import { MessageTemplate } from '../types';
 
 export const SYSTEM_DEFAULT_TEMPLATES: MessageTemplate[] = [
+  // ============================================================================
+  // القوالب الرسمية المعتمدة — أكاديمية الفجيرة العلمية الإسلامية
+  // ============================================================================
+  {
+    id: 'tpl-fujairah-absence',
+    schoolId: 'system',
+    name: 'قالب الغياب الرسمي — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'attendance',
+    subject: 'إشعار تغيب الطالب {studentName} — أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'إشعار غياب',
+    importance: 'important',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#FEF3C7',
+      badgeText: '#92400E',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'إشعار غياب طالب', color: '#D97706' },
+      studentCard: { enabled: true },
+      greeting: { enabled: false, text: '' },
+      dataTable: {
+        enabled: true,
+        items: [
+          { id: '1', label: 'اسم الطالب', value: '{studentName} ({studentNumber})' },
+          { id: '2', label: 'الصف والشعبة', value: 'الصف {grade} / الشعبة {section}' },
+          { id: '3', label: 'تاريخ الغياب', value: '{date}' },
+        ],
+      },
+      mainBody: {
+        enabled: true,
+        text: `ولي الأمر المحترم،
+نحيطكم علمًا بتغيب الطالب {studentName}، الصف {grade}، الشعبة {section}، بتاريخ {date}.
+نرجو متابعة انتظام الطالب والتواصل مع إدارة الأكاديمية عند الحاجة.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: {
+        enabled: false,
+        title: 'الإجراء المطلوب',
+        text: 'نرجو متابعة انتظام الطالب والتواصل مع إدارة الأكاديمية عند الحاجة.',
+      },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `ولي الأمر المحترم،
+نحيطكم علمًا بتغيب الطالب {studentName}، الصف {grade}، الشعبة {section}، بتاريخ {date}.
+نرجو متابعة انتظام الطالب والتواصل مع إدارة الأكاديمية عند الحاجة.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+    variables: ['{studentName}', '{studentNumber}', '{grade}', '{section}', '{date}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
+  {
+    id: 'tpl-fujairah-morning-tardiness',
+    schoolId: 'system',
+    name: 'قالب التأخير الصباحي الرسمي — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'tardiness',
+    subject: 'إشعار تأخير صباحي للطالب {studentName} — أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'إشعار تأخير صباحي',
+    importance: 'normal',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#E0F2FE',
+      badgeText: '#0369A1',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'إشعار تأخير صباحي', color: '#0284C7' },
+      studentCard: { enabled: true },
+      greeting: { enabled: false, text: '' },
+      dataTable: {
+        enabled: true,
+        items: [
+          { id: '1', label: 'اسم الطالب', value: '{studentName} ({studentNumber})' },
+          { id: '2', label: 'الصف والشعبة', value: 'الصف {grade} / الشعبة {section}' },
+          { id: '3', label: 'تاريخ التأخير', value: '{date}' },
+        ],
+      },
+      mainBody: {
+        enabled: true,
+        text: `ولي الأمر المحترم،
+نود إشعاركم بتأخر الطالب {studentName} عن الحضور إلى الأكاديمية بتاريخ {date}، وقد تم تسجيل التأخير وفق الإجراءات المعتمدة.
+نرجو تعاونكم في متابعة انتظامه.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: {
+        enabled: false,
+        title: 'الإجراء المطلوب',
+        text: 'نرجو تعاونكم في متابعة انتظام الطالب بالحضور المبكر.',
+      },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `ولي الأمر المحترم،
+نود إشعاركم بتأخر الطالب {studentName} عن الحضور إلى الأكاديمية بتاريخ {date}، وقد تم تسجيل التأخير وفق الإجراءات المعتمدة.
+نرجو تعاونكم في متابعة انتظامه.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+    variables: ['{studentName}', '{studentNumber}', '{grade}', '{section}', '{date}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
+  {
+    id: 'tpl-fujairah-behavior-notice',
+    schoolId: 'system',
+    name: 'قالب المخالفة السلوكية المعتمد (محمي الخصوصية) — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'behavior',
+    subject: 'إشعار ملاحظة سلوكية معتمدة تخص الطالب {studentName} — أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'إشعار ملاحظة سلوكية',
+    importance: 'urgent',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#FEE2E2',
+      badgeText: '#991B1B',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'إشعار ملاحظة سلوكية معتمدة', color: '#DC2626' },
+      studentCard: { enabled: true },
+      greeting: { enabled: false, text: '' },
+      dataTable: {
+        enabled: true,
+        items: [
+          { id: '1', label: 'اسم الطالب', value: '{studentName} ({studentNumber})' },
+          { id: '2', label: 'الصف والشعبة', value: 'الصف {grade} / الشعبة {section}' },
+          { id: '3', label: 'التاريخ', value: '{date}' },
+        ],
+      },
+      mainBody: {
+        enabled: true,
+        text: `ولي الأمر المحترم،
+نود إحاطتكم بوجود ملاحظة سلوكية معتمدة تخص الطالب {studentName}.
+يرجى التواصل مع الإدارة المختصة للاطلاع على التفاصيل والإجراءات اللازمة.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: {
+        enabled: false,
+        title: 'الإجراء المطلوب',
+        text: 'يرجى التواصل مع الإدارة المختصة للاطلاع على التفاصيل والإجراءات اللازمة.',
+      },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `ولي الأمر المحترم،
+نود إحاطتكم بوجود ملاحظة سلوكية معتمدة تخص الطالب {studentName}.
+يرجى التواصل مع الإدارة المختصة للاطلاع على التفاصيل والإجراءات اللازمة.
+
+أكاديمية الفجيرة العلمية الإسلامية.`,
+    variables: ['{studentName}', '{studentNumber}', '{grade}', '{section}', '{date}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
+  {
+    id: 'tpl-fujairah-summon',
+    schoolId: 'system',
+    name: 'قالب الاستدعاء والاجتماعات — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'guardianCall',
+    subject: 'دعوة للتواصل وتحديد موعد بشأن الطالب {studentName} — أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'دعوة للتواصل / استدعاء',
+    importance: 'important',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#FEF3C7',
+      badgeText: '#92400E',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'دعوة للتواصل مع القسم المختص', color: '#C9A227' },
+      studentCard: { enabled: true },
+      greeting: { enabled: false, text: '' },
+      dataTable: {
+        enabled: true,
+        items: [
+          { id: '1', label: 'اسم الطالب', value: '{studentName} ({studentNumber})' },
+          { id: '2', label: 'الصف والشعبة', value: 'الصف {grade} / الشعبة {section}' },
+          { id: '3', label: 'التاريخ', value: '{date}' },
+        ],
+      },
+      mainBody: {
+        enabled: true,
+        text: `ولي الأمر المحترم،
+تدعوكم إدارة أكاديمية الفجيرة العلمية الإسلامية للتواصل مع القسم المختص بشأن متابعة الطالب {studentName}.
+يرجى التنسيق لتحديد موعد مناسب.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: {
+        enabled: false,
+        title: 'الإجراء المطلوب',
+        text: 'يرجى التنسيق لتحديد موعد مناسب.',
+      },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `ولي الأمر المحترم،
+تدعوكم إدارة أكاديمية الفجيرة العلمية الإسلامية للتواصل مع القسم المختص بشأن متابعة الطالب {studentName}.
+يرجى التنسيق لتحديد موعد مناسب.`,
+    variables: ['{studentName}', '{studentNumber}', '{grade}', '{section}', '{date}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
+  {
+    id: 'tpl-fujairah-academic-note',
+    schoolId: 'system',
+    name: 'قالب الملاحظة الأكاديمية والواجبات — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'academic',
+    subject: 'ملاحظة أكاديمية تخص الطالب {studentName} في مادة {subject} — أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'ملاحظة أكاديمية',
+    importance: 'normal',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#E0F2FE',
+      badgeText: '#0369A1',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'ملاحظة أكاديمية ومتابعة دراسية', color: '#006D77' },
+      studentCard: { enabled: true },
+      greeting: { enabled: false, text: '' },
+      dataTable: {
+        enabled: true,
+        items: [
+          { id: '1', label: 'اسم الطالب', value: '{studentName} ({studentNumber})' },
+          { id: '2', label: 'الصف والشعبة', value: 'الصف {grade} / الشعبة {section}' },
+          { id: '3', label: 'المادة الدراسية', value: '{subject}' },
+        ],
+      },
+      mainBody: {
+        enabled: true,
+        text: `ولي الأمر المحترم،
+نود إشعاركم بوجود ملاحظة أكاديمية تخص الطالب {studentName} في مادة {subject}.
+نرجو التعاون مع الأكاديمية لدعم تقدمه الدراسي.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: {
+        enabled: false,
+        title: 'الإجراء المطلوب',
+        text: 'نرجو التعاون مع الأكاديمية لدعم تقدمه الدراسي.',
+      },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `ولي الأمر المحترم،
+نود إشعاركم بوجود ملاحظة أكاديمية تخص الطالب {studentName} في مادة {subject}.
+نرجو التعاون مع الأكاديمية لدعم تقدمه الدراسي.`,
+    variables: ['{studentName}', '{studentNumber}', '{grade}', '{section}', '{subject}', '{date}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
+  {
+    id: 'tpl-fujairah-general-announcement',
+    schoolId: 'system',
+    name: 'قالب إعلان عام وتعميم مدرسي — أكاديمية الفجيرة العلمية الإسلامية',
+    category: 'custom',
+    subject: 'تعميم وإعلان رسمي من إدارة أكاديمية الفجيرة العلمية الإسلامية',
+    badgeText: 'إعلان وتعميم مدرسي',
+    importance: 'normal',
+    colors: {
+      primary: '#0B2748',
+      accent: '#C9A227',
+      background: '#FFFFFF',
+      badgeBg: '#FEF3C7',
+      badgeText: '#92400E',
+    },
+    sections: {
+      schoolIdentity: { enabled: true },
+      badge: { enabled: true, text: 'إعلان وتعميم رسمي', color: '#C9A227' },
+      studentCard: { enabled: false },
+      greeting: { enabled: false, text: '' },
+      dataTable: { enabled: false, items: [] },
+      mainBody: {
+        enabled: true,
+        text: `السادة أولياء الأمور المحترمون،
+{messageBody}
+
+مع خالص التقدير،
+إدارة أكاديمية الفجيرة العلمية الإسلامية.`,
+      },
+      keyPoints: { enabled: false, points: [] },
+      requiredAction: { enabled: false, title: '', text: '' },
+      actionButton: { enabled: false, text: '', url: '' },
+      closingAndSignature: {
+        enabled: false,
+        closingText: '',
+        signerName: '{senderName}',
+        signerRole: '{senderRole}',
+      },
+      contactBox: { enabled: true, phone: '{schoolPhone}', email: '{schoolEmail}' },
+      footer: { enabled: true, text: 'أكاديمية الفجيرة العلمية الإسلامية — مركز التواصل الذكي مع أولياء الأمور' },
+    },
+    body: `السادة أولياء الأمور المحترمون،
+{messageBody}
+
+مع خالص التقدير،
+إدارة أكاديمية الفجيرة العلمية الإسلامية.`,
+    variables: ['{messageBody}', '{date}', '{schoolName}', '{schoolPhone}', '{schoolEmail}'],
+    scope: 'system',
+    isActive: true,
+    isDefaultForCategory: true,
+    isSystemTemplate: true,
+    version: 1,
+    createdBy: 'system',
+    createdByName: 'إدارة الأكاديمية',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+
   // 1. الغياب المتكرر
   {
     id: 'tpl-repeated-absence',

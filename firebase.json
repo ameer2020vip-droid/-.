@@ -1,0 +1,69 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/gmail/oauth/start",
+        "function": {
+          "functionId": "gmailOAuthStart",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/gmail/oauth/callback",
+        "function": {
+          "functionId": "gmailOAuthCallback",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/gmail/disconnect",
+        "function": {
+          "functionId": "gmailOAuthDisconnect",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/gmail/test-single",
+        "function": {
+          "functionId": "gmailTestSingle",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/gmail/test-batch",
+        "function": {
+          "functionId": "gmailTestBatch",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

@@ -56,7 +56,11 @@ import {
 } from '../utils/time';
 import { useSchoolSettings } from '../context/SchoolSettingsContext';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { useAcademicFiltering } from '../hooks/useAcademicFiltering';
+import {
+  useAcademicFiltering,
+  getGradeDisplayLabel,
+  getGradeCycleSubtitle,
+} from '../hooks/useAcademicFiltering';
 
 interface AbsencePageProps {
   students: Student[];
@@ -133,6 +137,7 @@ export const AbsencePage: React.FC<AbsencePageProps> = ({
   // Dynamically compute filtered grades, tracks, and sections using useAcademicFiltering
   const {
     filteredGrades,
+    filteredTracks,
     filteredSections,
     generalSections,
     advancedSections,
@@ -150,6 +155,13 @@ export const AbsencePage: React.FC<AbsencePageProps> = ({
       setSelectedGrade(filteredGrades[0]);
     }
   }, [filteredGrades, selectedGrade]);
+
+  // Auto-sync selectedTrack if not in filteredTracks for the selected grade
+  useEffect(() => {
+    if (filteredTracks.length > 0 && !filteredTracks.includes(selectedTrack)) {
+      setSelectedTrack(filteredTracks[0] as AcademicTrack);
+    }
+  }, [filteredTracks, selectedTrack]);
 
   // Auto-sync selectedSection when grade or track changes if selectedSection is not in active filteredSections
   useEffect(() => {
@@ -176,10 +188,16 @@ export const AbsencePage: React.FC<AbsencePageProps> = ({
     }
   }, [tableFilteredSections, tableSectionFilter]);
 
-  // Students in selected grade, track & section
+  // Students in selected grade, track & section (with fallback to grade + section if track is custom/empty)
   const sectionStudents = useMemo(() => {
+    const exactMatch = students.filter(
+      (s) => s.grade === selectedGrade && (s.track || 'عام') === selectedTrack && s.section === selectedSection
+    );
+    if (exactMatch.length > 0) {
+      return exactMatch.sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
+    }
     return students
-      .filter((s) => s.grade === selectedGrade && (s.track || 'عام') === selectedTrack && s.section === selectedSection)
+      .filter((s) => s.grade === selectedGrade && s.section === selectedSection)
       .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
   }, [students, selectedGrade, selectedTrack, selectedSection]);
 
@@ -695,7 +713,6 @@ export const AbsencePage: React.FC<AbsencePageProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedGrade(grade);
-                      setSelectedSection('1');
                       setAbsentSelections({});
                     }}
                     className={`p-4 rounded-2xl border text-right transition-all cursor-pointer relative overflow-hidden ${
@@ -718,9 +735,9 @@ export const AbsencePage: React.FC<AbsencePageProps> = ({
                         </span>
                       )}
                     </div>
-                    <h3 className="text-lg font-black font-['Tajawal']">الصف {grade}</h3>
+                    <h3 className="text-lg font-black font-['Tajawal']">{getGradeDisplayLabel(grade)}</h3>
                     <p className={`text-[11px] mt-1 ${isSelected ? 'text-slate-200' : 'text-slate-400'}`}>
-                      المرحلة الثانوية
+                      {getGradeCycleSubtitle(grade)}
                     </p>
                   </button>
                 );

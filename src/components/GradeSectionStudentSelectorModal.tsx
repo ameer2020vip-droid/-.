@@ -15,6 +15,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Student, GradeLevel, SectionName, AcademicTrack } from '../types';
+import {
+  ACADEMY_STANDARD_GRADES,
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+  getGradeIconNumber,
+  getGradeCycleSubtitle,
+} from '../hooks/useAcademicFiltering';
 
 interface GradeSectionStudentSelectorModalProps {
   isOpen: boolean;
@@ -57,21 +65,27 @@ export const GradeSectionStudentSelectorModal: React.FC<GradeSectionStudentSelec
 
   if (!isOpen) return null;
 
-  // Grade definitions
-  const gradesList: { id: GradeLevel; title: string; subtitle: string; iconNumber: string }[] = [
-    { id: 'تاسع', title: 'الصف التاسع', subtitle: 'الحلقة الثالثة', iconNumber: '09' },
-    { id: 'عاشر', title: 'الصف العاشر', subtitle: 'المرحلة الثانوية', iconNumber: '10' },
-    { id: 'حادي عشر', title: 'الصف الحادي عشر', subtitle: 'المسار الأكاديمي', iconNumber: '11' },
-    { id: 'ثاني عشر', title: 'الصف الثاني عشر', subtitle: 'شهادة الثانوية العامة', iconNumber: '12' },
-  ];
+  // Dynamic Grade definitions from imported students (or ACADEMY_STANDARD_GRADES if empty)
+  const gradesList = useMemo(() => {
+    const gradeSet = new Set<string>();
+    students.forEach((s) => {
+      if (s.grade) gradeSet.add(s.grade);
+    });
+    const keys = gradeSet.size > 0 ? Array.from(gradeSet).sort(compareGrades) : [...ACADEMY_STANDARD_GRADES];
+    return keys.map((id) => ({
+      id: id as GradeLevel,
+      title: getGradeDisplayLabel(id),
+      subtitle: getGradeCycleSubtitle(id),
+      iconNumber: getGradeIconNumber(id),
+    }));
+  }, [students]);
 
   // Count students per grade
   const gradeCounts = useMemo(() => {
-    const counts: Record<string, number> = { تاسع: 0, عاشر: 0, 'حادي عشر': 0, 'ثاني عشر': 0 };
+    const counts: Record<string, number> = {};
     students.forEach((s) => {
-      if (counts[s.grade] !== undefined) {
-        counts[s.grade]++;
-      }
+      const g = s.grade || 'غير محدد';
+      counts[g] = (counts[g] || 0) + 1;
     });
     return counts;
   }, [students]);
@@ -84,13 +98,7 @@ export const GradeSectionStudentSelectorModal: React.FC<GradeSectionStudentSelec
     gradeStudents.forEach((s) => {
       if (s.section) secSet.add(String(s.section));
     });
-    // Sort sections numerically/alphabetically
-    return Array.from(secSet).sort((a, b) => {
-      const numA = parseInt(a, 10);
-      const numB = parseInt(b, 10);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.localeCompare(b);
-    });
+    return Array.from(secSet).sort(compareSections);
   }, [students, selectedGrade]);
 
   // Available tracks for the selected grade

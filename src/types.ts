@@ -1,6 +1,20 @@
-export type GradeLevel = 'تاسع' | 'عاشر' | 'حادي عشر' | 'ثاني عشر';
+export type GradeLevel =
+  | 'أول'
+  | 'ثاني'
+  | 'ثالث'
+  | 'رابع'
+  | 'خامس'
+  | 'سادس'
+  | 'سابع'
+  | 'ثامن'
+  | 'تاسع'
+  | 'عاشر'
+  | 'حادي عشر'
+  | 'ثاني عشر'
+  | 'غير محدد'
+  | (string & {});
 export type SectionName = string;
-export type AcademicTrack = 'عام' | 'متقدم' | 'يحتاج مراجعة';
+export type AcademicTrack = 'عام' | 'متقدم' | 'نخبة' | 'تطبيقي' | 'بدون مسار' | 'يحتاج مراجعة' | (string & {});
 
 export interface TrackAuditLog {
   id: string;
@@ -39,6 +53,10 @@ export interface Student {
   grade: GradeLevel;
   section: SectionName;
   track: AcademicTrack;
+  rawGrade?: string;
+  rawSection?: string;
+  rawTrack?: string;
+  hasMissingGradeOrSection?: boolean;
   status: 'منتظم' | 'متابع سلوكيًا' | 'في غرفة الإرشاد' | 'إنذار أول';
   nationalId?: string;
   parentName: string;
@@ -135,6 +153,7 @@ export interface TardinessRecord {
   date: string; // YYYY-MM-DD
   time: string; // hh:mm a UAE time
   timestamp: number;
+  createdAt?: string;
   reason?: string;
   counselorNotes?: string;
   previousTardinessCount: number;
@@ -605,7 +624,10 @@ export type UserRole =
   | 'systemAdmin'
   | 'school_admin'
   | 'schoolAdmin'
+  | 'academic_advisor'
+  | 'student_affairs'
   | 'counselor'
+  | 'teacher'
   | 'viewer';
 
 export function isSystemOwner(role?: string | null): boolean {
@@ -922,7 +944,9 @@ export interface MessageLogRecord {
   schoolId: string;
   templateId?: string;
   templateName?: string;
+  templateTitle?: string;
   templateCategory?: MessageCategory;
+  category?: MessageCategory;
   studentId: string;
   studentNumber: string;
   studentName: string;
@@ -931,24 +955,39 @@ export interface MessageLogRecord {
   track?: string;
   recipientName: string;
   recipientRelation: string;
+  recipientRole?: string;
+  recipientAddress?: string;
   recipientPhoneMasked: string; // e.g. +971 50 *** 1234
   recipientEmailMasked?: string;
   recipientPhoneFull?: string;
   recipientEmailFull?: string;
   channel: MessageChannel;
-  status: MessageStatus;
+  status: MessageStatus | string;
   subject: string;
   messageSnapshot: string;
+  messageBody?: string;
+  incidentId?: string;
+  incidentType?: 'absence' | 'tardiness' | 'violation' | 'academic' | 'summon' | 'general';
   violationId?: string;
+  absenceId?: string;
+  tardinessId?: string;
   violationDescription?: string;
   incidentDate?: string;
   approvedAction?: string;
   requiredGuardianAction?: string;
+  dedupeKey?: string;
   createdBy: string;
   createdByName: string;
+  sentByName?: string;
   senderRole?: string;
   createdAt: string;
+  openedAt?: string;
   confirmedAt?: string;
+  retryCount?: number;
+  lastRetryAt?: string;
+  retriedBy?: string;
+  isTestMode?: boolean;
+  mergedStudentNumbers?: string[];
   notes?: string;
   relatedAction?: string;
 }
@@ -2651,5 +2690,132 @@ export interface CounselorNotification {
   timestamp: number;
   isUrgent?: boolean;
 }
+
+// ============================================================================
+// GMAIL OAUTH 2.0 & AUTOMATED GUARDIAN NOTIFICATION SYSTEM (نظام الربط التلقائي مع Gmail)
+// ============================================================================
+
+export type GmailAuthorizationStatus =
+  | 'disconnected'             // غير مرتبط
+  | 'authorized_pending_test'  // مفوّض بانتظار اختبار الإرسال الحقيقي
+  | 'connected_verified'       // متصل ومفعّل بعد اختبار ناجح
+  | 'token_expired_or_revoked' // انتهى التفويض أو تم سحبه
+  | 'quota_paused';            // موقوف مؤقتاً لبلوغ الحد اليومي
+
+export type GmailNotificationEventType =
+  | 'tardiness_notice'  // إشعار التأخير الصباحي بعد اعتماد الواقعة
+  | 'absence_notice'    // إشعار الغياب بعد اعتماد الواقعة
+  | 'violation_notice'; // إشعار المخالفة السلوكية بعد مراجعة المسؤول واعتماد الإرسال
+
+export type GmailQueueDeliveryState =
+  | 'pending'           // انتظار
+  | 'processing'        // معالجة
+  | 'accepted_by_gmail' // قبول من Gmail (لا يعني تأكيد التسليم النهائي لصندوق الوارد)
+  | 'failed'            // فشل
+  | 'uncertain';        // حالة غير مؤكدة (انقطع الاتصال بعد إرسال الطلب لـ Gmail)
+
+export interface GmailEmailTemplateConfig {
+  id: GmailNotificationEventType;
+  titleAr: string;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface GmailConnectionConfig {
+  schoolId: string;
+  connectedEmail: string | null;
+  authorizationStatus: GmailAuthorizationStatus;
+  grantedScopes: string[];
+  authorizedAt: string | null;
+  authorizedByUid: string | null;
+  authorizedByName: string | null;
+  secretManagerConfigured: boolean;
+  secretResourcePath?: string;
+  // Testing & Staged Activation Gates
+  isVerifiedByRealTest: boolean;
+  lastTestSuccessAt: string | null;
+  lastTestRecipient: string | null;
+  lastTestMessageId: string | null;
+  isBatchTestVerified: boolean;
+  lastBatchTestSuccessAt: string | null;
+  lastBatchTestCount: number;
+  adminApprovedProductionSend: boolean;
+  adminApprovedByName: string | null;
+  adminApprovedAt: string | null;
+  // Automated Sending Controls
+  autoSendEnabled: boolean;
+  autoSendTardinessOnApprove: boolean;
+  autoSendAbsenceOnApprove: boolean;
+  requireAdminApprovalForViolations: boolean; // Always true per security policy
+  serviceActivatedAt: string | null;          // Cutoff timestamp: never auto-send for older incidents
+  // Quota & Rate Limit Controls
+  dailyLimitMax: number;
+  dailySentCount: number;
+  dailyCounterDate: string;                   // YYYY-MM-DD
+  remainingDailyQuota?: number;               // Live MailApp.getRemainingDailyQuota() reported by Apps Script
+  appsScriptWorkerStatus?: string;            // Last worker state from Apps Script time-driven trigger
+  appsScriptLastHeartbeatAt?: string;         // Last heartbeat timestamp from Apps Script
+  bridgeSpreadsheetUrl?: string;              // Google Sheets intermediate bridge URL
+  rateLimitDelayMs: number;
+  isQuotaReachedAlert: boolean;
+  // Alerts & Error Diagnostics
+  adminAlertMessage: string | null;
+  adminAlertType: 'none' | 'token_revoked' | 'quota_reached' | 'config_error' | 'uncertain_state';
+  oauthPublishingMode: 'testing' | 'in_production';
+  updatedAt: string;
+}
+
+export interface GmailQueueRecord {
+  id: string;                                 // Deterministic idempotencyKey
+  idempotencyKey: string;                     // ${schoolId}_${notificationType}_${incidentId}_${studentId}_${recipientEmail}
+  schoolId: string;
+  notificationType: GmailNotificationEventType;
+  state: GmailQueueDeliveryState;
+  // Student immutable link
+  studentId: string;
+  studentNumber: string;
+  studentName: string;
+  grade: string;
+  section: string;
+  // Incident details (sanitized, no sensitive psychological notes)
+  incidentId: string;
+  incidentDate: string;
+  incidentTime?: string;
+  incidentTitle: string;
+  incidentDegree?: string;
+  actionTaken?: string;
+  // Guardian verification
+  guardianName: string;
+  guardianRelation: string;
+  recipientEmail: string;
+  isAuthorizedGuardian: boolean;
+  // Rendered isolated email content
+  subject: string;
+  bodyText: string;
+  rfc822MessageId: string;
+  // Approval & Audit metadata
+  approvedByUid: string;
+  approvedByName: string;
+  approvedByRole: string;
+  approvedAt: string;
+  isAdminReviewedViolation?: boolean;
+  // Execution & Gmail API response tracking
+  attemptCount: number;
+  lastAttemptId?: string;
+  lastAttemptAt?: string;
+  gmailMessageId?: string;
+  gmailThreadId?: string;
+  acceptedByGmailAt?: string;
+  failureReason?: string;
+  uncertainReason?: string;
+  retriedByUid?: string;
+  retriedByName?: string;
+  retriedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 

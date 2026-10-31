@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   User,
@@ -28,6 +28,7 @@ import {
   Home,
   Activity,
   ArrowRight,
+  Mail,
 } from 'lucide-react';
 import { StudentProfileHeader } from '../components/profile/StudentProfileHeader';
 import { StudentQuickActions } from '../components/profile/StudentQuickActions';
@@ -91,17 +92,41 @@ import {
   referStudentToCommittee,
   dispatchCommitteeNotification,
 } from '../storage';
-import { getLocalMessageLogsForStudent } from '../firebase/messageService';
+import {
+  getLocalMessageLogsForStudent,
+  fetchMessageLogs,
+  updateMessageLogStatus,
+  MESSAGE_STATUS_LABELS_AR,
+  MESSAGE_CATEGORY_LABELS_AR,
+} from '../firebase/messageService';
 import { CATEGORY_LABELS } from '../data/defaultMessageTemplates';
 import { getUaeTodayDateString } from '../utils/time';
 import { resolveTardinessFollowUpStatus } from '../utils/bylawsRules';
+import {
+  getUniqueStudentTardinessDates,
+  getStudentTardinessRecordsList,
+} from '../hooks/useAcademicFiltering';
+import {
+  fetchGmailQueueRecords,
+  extractApprovedGuardianEmail,
+} from '../firebase/gmailNotificationService';
+import {
+  getGmailQueueStateBadge,
+  getNotificationTypeLabel,
+} from '../components/GmailOAuthIntegrationPanel';
+import type { GmailQueueRecord, MessageLogRecord } from '../types';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   student: Student | null;
+  tardinessRecords?: TardinessRecord[];
   violations?: ViolationRecord[];
   absences?: AbsenceRecord[];
+  warningForms?: WarningFormRecord[];
+  parentSummonForms?: ParentSummonFormRecord[];
+  violationReports?: ViolationReportRecord[];
+  parentNoticeForms?: ParentNoticeFormRecord[];
   onRegisterViolationForStudent?: (studentId: string) => void;
   onOpenWarningForStudent: (studentId: string) => void;
   onOpenNoticeForStudent?: (studentId: string) => void;
@@ -133,8 +158,13 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   isOpen,
   onClose,
   student,
+  tardinessRecords = [],
   violations = [],
   absences = [],
+  warningForms = [],
+  parentSummonForms = [],
+  violationReports = [],
+  parentNoticeForms = [],
   onRegisterViolationForStudent,
   onOpenWarningForStudent,
   onOpenNoticeForStudent,
@@ -179,81 +209,360 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [selectedPickupCommitmentForPrint, setSelectedPickupCommitmentForPrint] = useState<AuthorizedPickupCommitmentRecord | null>(null);
   const [selectedMeetingForPrint, setSelectedMeetingForPrint] = useState<BehaviorCommitteeMeeting | null>(null);
   const [printingOfficialDoc, setPrintingOfficialDoc] = useState<OfficialDocumentRecord | null>(null);
+  const [showTardinessDatesModal, setShowTardinessDatesModal] = useState<boolean>(false);
+  const [selectedViolationDetail, setSelectedViolationDetail] = useState<ViolationRecord | null>(null);
+  const [studentGmailRecords, setStudentGmailRecords] = useState<GmailQueueRecord[]>([]);
+  const [firestoreMessageLogs, setFirestoreMessageLogs] = useState<MessageLogRecord[]>([]);
+  const [commChannelFilter, setCommChannelFilter] = useState<'all' | 'whatsapp' | 'email'>('all');
+  const [commStatusFilter, setCommStatusFilter] = useState<string>('all');
+  const [commSearchQuery, setCommSearchQuery] = useState<string>('');
+  const [expandedMessageLogId, setExpandedMessageLogId] = useState<string | null>(null);
+  const [confirmingLogId, setConfirmingLogId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !student) {
+      setStudentGmailRecords([]);
+      setFirestoreMessageLogs([]);
+      return;
+    }
+    let mounted = true;
+    const activeSchoolId = schoolSettings.schoolId || '7001';
+    fetchGmailQueueRecords(activeSchoolId, student.studentNumber || student.id)
+      .then((records) => {
+        if (mounted) setStudentGmailRecords(records);
+      })
+      .catch(() => {});
+
+    fetchMessageLogs(activeSchoolId, 400)
+      .then((logs) => {
+        if (mounted) setFirestoreMessageLogs(logs);
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen, student, schoolSettings.schoolId]);
+
+  // Merge live Firestore props with localStorage records (deduplicating by id)
+  const mergedTardiesList = useMemo(() => {
+    const map = new Map<string, TardinessRecord>();
+    getMorningDelays().forEach((r) => map.set(r.id, r));
+    tardinessRecords.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [tardinessRecords]);
+
+  const mergedViolationsList = useMemo(() => {
+    const map = new Map<string, ViolationRecord>();
+    getViolations().forEach((r) => map.set(r.id, r));
+    violations.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [violations]);
+
+  const mergedAbsencesList = useMemo(() => {
+    const map = new Map<string, AbsenceRecord>();
+    getAbsences().forEach((r) => map.set(r.id, r));
+    absences.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [absences]);
+
+  const mergedWarningsList = useMemo(() => {
+    const map = new Map<string, WarningFormRecord>();
+    getWarningForms().forEach((r) => map.set(r.id, r));
+    warningForms.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [warningForms]);
+
+  const mergedSummonsList = useMemo(() => {
+    const map = new Map<string, ParentSummonFormRecord>();
+    getParentSummonForms().forEach((r) => map.set(r.id, r));
+    parentSummonForms.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [parentSummonForms]);
+
+  const mergedReportsList = useMemo(() => {
+    const map = new Map<string, ViolationReportRecord>();
+    getViolationReports().forEach((r) => map.set(r.id, r));
+    violationReports.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [violationReports]);
+
+  const mergedNoticesList = useMemo(() => {
+    const map = new Map<string, ParentNoticeFormRecord>();
+    getParentNoticeForms().forEach((r) => map.set(r.id, r));
+    parentNoticeForms.forEach((r) => map.set(r.id, r));
+    return Array.from(map.values());
+  }, [parentNoticeForms]);
 
   // Load relevant student records (match by student ID or student national/school number)
   const timelineEvents = useMemo(
-    () => (student ? getStudentTimeline(student.id, { absences, violations }) : []),
-    [student, absences, violations]
+    () =>
+      student
+        ? getStudentTimeline(student.id, {
+            studentNumber: student.studentNumber,
+            absences: mergedAbsencesList,
+            violations: mergedViolationsList,
+            tardinessRecords: mergedTardiesList,
+            warningForms: mergedWarningsList,
+            parentSummonForms: mergedSummonsList,
+            violationReports: mergedReportsList,
+            parentNoticeForms: mergedNoticesList,
+          })
+        : [],
+    [
+      student,
+      mergedAbsencesList,
+      mergedViolationsList,
+      mergedTardiesList,
+      mergedWarningsList,
+      mergedSummonsList,
+      mergedReportsList,
+      mergedNoticesList,
+    ]
   );
   const parentMeetings = useMemo(() => (student ? getParentMeetings(student.id) : []), [student]);
-  const studentMessageLogs = useMemo(
-    () => (student ? getLocalMessageLogsForStudent(student.id, student.studentNumber) : []),
-    [student]
-  );
+  const studentMessageLogs = useMemo(() => {
+    if (!student) return [];
+    const stuNum = String(student.studentNumber || '').trim();
+    const localLogs = getLocalMessageLogsForStudent(student.id, student.studentNumber);
+    const map = new Map<string, MessageLogRecord>();
+
+    const matchesStudentByImmutableNumber = (log: MessageLogRecord): boolean => {
+      const logStuNum = String(log.studentNumber || '').trim();
+      if (stuNum && logStuNum) {
+        if (logStuNum === stuNum) return true;
+      }
+      if (
+        stuNum &&
+        Array.isArray(log.mergedStudentNumbers) &&
+        log.mergedStudentNumbers.some((num) => String(num).trim() === stuNum)
+      ) {
+        return true;
+      }
+      // Fallback only if record has no studentNumber or matches studentId directly
+      return log.studentId === student.id || (!!stuNum && String(log.studentId || '').trim() === stuNum);
+    };
+
+    localLogs.forEach((l) => {
+      if (matchesStudentByImmutableNumber(l)) {
+        map.set(l.id || l.messageId, l);
+      }
+    });
+    firestoreMessageLogs.forEach((fl) => {
+      if (matchesStudentByImmutableNumber(fl)) {
+        map.set(fl.id || fl.messageId, fl);
+      }
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  }, [student, firestoreMessageLogs]);
+
+  const resolveCommunicationStatusMeta = (log: MessageLogRecord): {
+    code: string;
+    labelAr: string;
+    badgeClass: string;
+    canConfirmSent: boolean;
+  } => {
+    const raw = String(log.status || 'draft');
+    if (raw === 'confirmed_sent' || raw === 'sent' || raw === 'أكد الموظف الإرسال') {
+      return {
+        code: 'confirmed_sent',
+        labelAr: 'أكد الموظف الإرسال',
+        badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700',
+        canConfirmSent: false,
+      };
+    }
+    if (raw === 'whatsapp_opened' || (raw === 'opened' && log.channel === 'whatsapp') || raw === 'تم فتح واتساب') {
+      return {
+        code: 'whatsapp_opened',
+        labelAr: 'تم فتح واتساب',
+        badgeClass: 'bg-teal-100 text-teal-900 border-teal-300 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-700',
+        canConfirmSent: true,
+      };
+    }
+    if (raw === 'email_opened' || (raw === 'opened' && log.channel === 'email') || raw === 'تم فتح البريد') {
+      return {
+        code: 'email_opened',
+        labelAr: 'تم فتح البريد',
+        badgeClass: 'bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-700',
+        canConfirmSent: true,
+      };
+    }
+    if (raw === 'ready' || raw === 'جاهزة للإرسال') {
+      return {
+        code: 'ready',
+        labelAr: 'جاهزة للإرسال',
+        badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700',
+        canConfirmSent: true,
+      };
+    }
+    if (raw === 'failed' || raw === 'فشل أو تعذر الفتح') {
+      return {
+        code: 'failed',
+        labelAr: 'فشل أو تعذر الفتح',
+        badgeClass: 'bg-rose-100 text-rose-900 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-700',
+        canConfirmSent: false,
+      };
+    }
+    if (raw === 'cancelled' || raw === 'skipped' || raw === 'ملغاة') {
+      return {
+        code: 'cancelled',
+        labelAr: 'ملغاة',
+        badgeClass: 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
+        canConfirmSent: false,
+      };
+    }
+    return {
+      code: 'draft',
+      labelAr: MESSAGE_STATUS_LABELS_AR[raw] || 'مسودة',
+      badgeClass: 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+      canConfirmSent: true,
+    };
+  };
+
+  const filteredStudentMessageLogs = useMemo(() => {
+    return studentMessageLogs.filter((log) => {
+      if (commChannelFilter !== 'all' && log.channel !== commChannelFilter) {
+        return false;
+      }
+      if (commStatusFilter !== 'all') {
+        const meta = resolveCommunicationStatusMeta(log);
+        if (meta.code !== commStatusFilter) return false;
+      }
+      if (commSearchQuery.trim()) {
+        const q = commSearchQuery.trim().toLowerCase();
+        const haystack = [
+          log.templateName,
+          log.templateTitle,
+          log.subject,
+          log.messageSnapshot,
+          log.messageBody,
+          log.createdByName,
+          log.sentByName,
+          log.recipientName,
+          log.studentNumber,
+          log.incidentId,
+          log.violationDescription,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [studentMessageLogs, commChannelFilter, commStatusFilter, commSearchQuery]);
+
+  const handleConfirmStudentMessageSent = async (log: MessageLogRecord) => {
+    const activeSchoolId = schoolSettings.schoolId || '7001';
+    const nowIso = new Date().toISOString();
+    setConfirmingLogId(log.id);
+    try {
+      await updateMessageLogStatus(activeSchoolId, log.id, 'confirmed_sent', nowIso, {
+        notes: 'تم تأكيد الإرسال يدوياً من سجل تواصل الطالب',
+      });
+      setFirestoreMessageLogs((prev) =>
+        prev.map((item) =>
+          item.id === log.id ? { ...item, status: 'confirmed_sent', confirmedAt: nowIso } : item
+        )
+      );
+    } catch (err) {
+      console.warn('Could not confirm message status:', err);
+    } finally {
+      setConfirmingLogId(null);
+    }
+  };
   const behaviorPlans = useMemo(() => (student ? getBehaviorPlans(student.id) : []), [student]);
   const positiveRecords = useMemo(() => (student ? getPositiveBehaviorRecords(student.id) : []), [student]);
+
   const studentTardies = useMemo(() => {
     if (!student) return [];
-    return getMorningDelays().filter(
-      (t) => t.studentId === student.id || (student.studentNumber && t.studentNumber === student.studentNumber)
-    ).sort((a, b) => b.date.localeCompare(a.date));
-  }, [student]);
+    return getStudentTardinessRecordsList(student, mergedTardiesList);
+  }, [student, mergedTardiesList]);
+
+  const uniqueTardinessDates = useMemo(() => {
+    if (!student) return [];
+    return getUniqueStudentTardinessDates(student, mergedTardiesList);
+  }, [student, mergedTardiesList]);
 
   const studentAbsences = useMemo(() => {
     if (!student) return [];
-    const list = absences && absences.length > 0 ? absences : getAbsences();
-    return list.filter(
-      (a) => a.studentId === student.id || (student.studentNumber && a.studentNumber === student.studentNumber)
-    ).sort((a, b) => b.date.localeCompare(a.date));
-  }, [student, absences]);
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedAbsencesList
+      .filter(
+        (a) =>
+          a.studentId === student.id ||
+          (stuNum && (String(a.studentNumber || '').trim() === stuNum || String(a.studentId || '').trim() === stuNum))
+      )
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [student, mergedAbsencesList]);
 
   const totalAbsencesCount = studentAbsences.length;
-  const totalTardinessCount = studentTardies.length;
+  const totalTardinessCount = uniqueTardinessDates.length;
   const lastAbsenceDate = studentAbsences.length > 0 ? studentAbsences[0].date : 'لا يوجد';
-  const lastTardinessDate = studentTardies.length > 0 ? studentTardies[0].date : 'لا يوجد';
+  const lastTardinessDate = uniqueTardinessDates.length > 0 ? uniqueTardinessDates[0] : 'لا يوجد';
 
-  const allViolationsList = violations && violations.length > 0 ? violations : getViolations();
   const studentViolations = useMemo(() => {
     if (!student) return [];
-    return allViolationsList.filter(
-      (v) => v.studentId === student.id || (student.studentNumber && v.studentNumber === student.studentNumber)
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedViolationsList.filter(
+      (v) =>
+        v.studentId === student.id ||
+        (stuNum && (String(v.studentNumber || '').trim() === stuNum || String(v.studentId || '').trim() === stuNum))
     );
-  }, [allViolationsList, student]);
+  }, [mergedViolationsList, student]);
 
   const studentWarnings = useMemo(() => {
     if (!student) return [];
-    return getWarningForms().filter(
-      (w) => w.studentId === student.id || (student.studentNumber && w.studentNumber === student.studentNumber)
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedWarningsList.filter(
+      (w) =>
+        w.studentId === student.id ||
+        (stuNum && (String(w.studentNumber || '').trim() === stuNum || String(w.studentId || '').trim() === stuNum))
     );
-  }, [student]);
+  }, [student, mergedWarningsList]);
 
   const studentNotices = useMemo(() => {
     if (!student) return [];
-    return getParentNoticeForms().filter(
-      (n) => n.studentId === student.id || (student.studentNumber && n.studentNumber === student.studentNumber)
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedNoticesList.filter(
+      (n) =>
+        n.studentId === student.id ||
+        (stuNum && (String(n.studentNumber || '').trim() === stuNum || String(n.studentId || '').trim() === stuNum))
     );
-  }, [student]);
+  }, [student, mergedNoticesList]);
 
   const studentSummons = useMemo(() => {
     if (!student) return [];
-    return getParentSummonForms().filter(
-      (s) => s.studentId === student.id || (student.studentNumber && s.studentNumber === student.studentNumber)
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedSummonsList.filter(
+      (s) =>
+        s.studentId === student.id ||
+        (stuNum && (String(s.studentNumber || '').trim() === stuNum || String(s.studentId || '').trim() === stuNum))
     );
-  }, [student]);
+  }, [student, mergedSummonsList]);
 
   const studentCommitments = useMemo(() => {
     if (!student) return [];
+    const stuNum = String(student.studentNumber || '').trim();
     return getParentCommitmentForms().filter(
-      (c) => c.studentId === student.id || (student.studentNumber && c.studentNumber === student.studentNumber)
+      (c) =>
+        c.studentId === student.id ||
+        (stuNum && (String(c.studentNumber || '').trim() === stuNum || String(c.studentId || '').trim() === stuNum))
     );
   }, [student]);
 
   const studentReports = useMemo(() => {
     if (!student) return [];
-    return getViolationReports().filter(
-      (r) => r.studentId === student.id || (student.studentNumber && r.studentNumber === student.studentNumber)
+    const stuNum = String(student.studentNumber || '').trim();
+    return mergedReportsList.filter(
+      (r) =>
+        r.studentId === student.id ||
+        (stuNum && (String(r.studentNumber || '').trim() === stuNum || String(r.studentId || '').trim() === stuNum))
     );
-  }, [student]);
+  }, [student, mergedReportsList]);
 
   const studentDecisions = useMemo(() => {
     if (!student) return [];
@@ -461,13 +770,13 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   };
 
   const tabs: { id: ProfileTabType; label: string; count?: number }[] = [
-    { id: 'overview', label: 'نظرة عامة' },
-    { id: 'timeline', label: 'التسلسل الزمني', count: timelineEvents.length },
-    { id: 'violations', label: 'المخالفات', count: studentViolations.length + studentReports.length },
-    { id: 'tardiness', label: 'التأخر', count: studentTardies.length },
-    { id: 'absences', label: 'الغياب', count: studentAbsences.length },
+    { id: 'overview', label: 'البيانات الأساسية والملخص' },
+    { id: 'tardiness', label: 'التأخير الصباحي', count: totalTardinessCount },
+    { id: 'violations', label: 'المخالفات السلوكية', count: studentViolations.length + studentReports.length },
+    { id: 'timeline', label: 'السجل الزمني', count: timelineEvents.length },
+    { id: 'communication', label: 'سجل التواصل', count: parentMeetings.length + studentMessageLogs.length },
     { id: 'forms_signatures', label: 'النماذج والتعهدات', count: allStudentFormsCount },
-    { id: 'communication', label: 'التواصل', count: parentMeetings.length },
+    { id: 'absences', label: 'الغياب المدرسي', count: studentAbsences.length },
     {
       id: 'cases_plans',
       label: 'الحالات والخطط',
@@ -540,7 +849,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
             onClose={onClose}
             behaviorScore={student.behaviorScore ?? 100}
             violationsCount={studentViolations.length + studentReports.length}
-            tardinessCount={studentTardies.length}
+            tardinessCount={totalTardinessCount}
             absencesCount={studentAbsences.length}
             pledgesCount={studentWarnings.length + studentNotices.length + studentCommitments.length}
             activeCasesCount={behaviorPlans.length + studentDecisions.length}
@@ -1023,7 +1332,16 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                           );
                         })()}
 
-                        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                        <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedViolationDetail(v)}
+                            className="px-2.5 py-1 text-[11px] font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                            title="عرض التفاصيل الكاملة للواقعة السلوكية"
+                          >
+                            <ExternalLink className="w-3 h-3 text-[#C9A227]" />
+                            <span>التفاصيل الكاملة للواقعة</span>
+                          </button>
                           {onOpenViolationReportForStudent && (
                             <button
                               type="button"
@@ -1153,16 +1471,68 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                     <Clock className="w-4 h-4 text-amber-600" />
                     <span>سجل التأخير الصباحي والانضباط المدرسي للطالب</span>
                   </h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    الرصيد التراكمي الفعلي: <strong className="font-mono text-amber-700 dark:text-amber-400 font-bold">{studentTardies.length} مرات تأخير</strong> • يتم احتساب الإجراء الاسترشادي ومتابعة التوقيعات دون أي عقوبات آلية قسرية.
+                  <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span>الرصيد التراكمي الفعلي (أيام تأخير فريدة):</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowTardinessDatesModal((prev) => !prev)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-mono font-black border border-amber-300 dark:border-amber-700 cursor-pointer transition-colors"
+                      title="اضغط لعرض التواريخ الفعلية المحسوبة في الرصيد التراكمي"
+                    >
+                      <span>{totalTardinessCount} أيام تأخير فعلية</span>
+                      <Calendar className="w-3 h-3" />
+                    </button>
+                    <span>• إجمالي السجلات: ({studentTardies.length}) • يتم احتساب الإجراء الاسترشادي ومتابعة التوقيعات دون تكرار لنفس اليوم.</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${studentTardies.length >= 3 ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}`}>
-                    {studentTardies.length >= 3 ? 'تنبيه: يتطلب متابعة (3+ مرات)' : 'حالة اعتيادية'}
+                  <button
+                    type="button"
+                    onClick={() => setShowTardinessDatesModal((prev) => !prev)}
+                    className="px-2.5 py-1 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-50 cursor-pointer"
+                  >
+                    {showTardinessDatesModal ? 'إخفاء التواريخ المحسوبة' : 'عرض التواريخ المحسوبة'}
+                  </button>
+                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${totalTardinessCount >= 3 ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'}`}>
+                    {totalTardinessCount >= 3 ? 'تنبيه: يتطلب متابعة (3+ أيام)' : 'حالة اعتيادية'}
                   </span>
                 </div>
               </div>
+
+              {showTardinessDatesModal && (
+                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border-2 border-amber-300 dark:border-amber-800 shadow-sm space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-amber-100 dark:border-amber-900/50 pb-2">
+                    <span className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-amber-600" />
+                      <span>التواريخ الفعلية المحسوبة في الرصيد التراكمي للطالب ({uniqueTardinessDates.length} تاريخ فريد):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowTardinessDatesModal(false)}
+                      className="text-xs text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      إغلاق
+                    </button>
+                  </div>
+                  {uniqueTardinessDates.length === 0 ? (
+                    <p className="text-xs text-slate-400">لا توجد تواريخ تأخير مسجلة.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {uniqueTardinessDates.map((d, idx) => (
+                        <span
+                          key={d}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs font-mono font-bold text-amber-900 dark:text-amber-200"
+                        >
+                          <span className="w-4 h-4 rounded-full bg-amber-200/80 dark:bg-amber-800 text-[10px] flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <span>{d}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {studentTardies.length === 0 ? (
                 <div className="py-12 text-center bg-slate-50/50 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
@@ -2102,72 +2472,440 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 )}
               </div>
 
-              {/* Documented WhatsApp & Email Communications Log */}
+              {/* Automated Gmail API Notification Log Linked to Student File */}
               <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-emerald-600" />
-                    <span>سجل مراسلات أولياء الأمور عبر واتساب والبريد ({studentMessageLogs.length}):</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h5 className="text-xs font-black text-[#0B2748] dark:text-[#C9A227] flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-[#C9A227]" />
+                    <span>سجل إشعارات Gmail التلقائية المرتبطة بملف الطالب ({studentGmailRecords.length}):</span>
                   </h5>
+                  <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                    بريد ولي الأمر المعتمد: {extractApprovedGuardianEmail(student).email || 'غير مسجل'}
+                  </span>
                 </div>
 
-                {studentMessageLogs.length === 0 ? (
-                  <div className="py-8 text-center bg-slate-50/50 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-1.5">
-                    <MessageSquare className="w-7 h-7 text-slate-400 mx-auto" />
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                      لا توجد رسائل واتساب أو إشعارات مسجلة لهذا الطالب بعد.
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      تُسجل جميع الرسائل المرسلة من «مركز مراسلات أولياء الأمور» تلقائياً هنا في ملف الطالب.
-                    </p>
+                {studentGmailRecords.length === 0 ? (
+                  <div className="py-5 px-4 text-center bg-slate-50/60 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                    لا توجد محاولات إرسال عبر Gmail مسجلة لهذا الطالب حتى الآن.
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    {studentMessageLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="p-4 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/30 dark:bg-emerald-950/15 space-y-2 text-xs"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 dark:border-emerald-900/40 pb-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-bold">
-                              {log.channel === 'whatsapp' ? 'واتساب رسمي' : 'بريد إلكتروني'}
-                            </span>
-                            <strong className="text-slate-900 dark:text-white">
-                              {log.templateTitle || CATEGORY_LABELS[log.category] || 'إشعار ولي أمر'}
-                            </strong>
-                            <span className="text-[11px] text-slate-500">
-                              إلى: {log.recipientName} ({log.recipientRole}) • <span className="font-mono" dir="ltr">{log.recipientAddress}</span>
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-mono text-slate-500">
-                              {new Date(log.createdAt).toLocaleString('ar-AE', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
-                              {log.status === 'opened' ? 'تم فتح واتساب / جاهز للإرسال' : log.status === 'sent' ? 'تم الإرسال' : log.status}
+                    {studentGmailRecords.map((gRec) => {
+                      const badge = getGmailQueueStateBadge(gRec.state);
+                      return (
+                        <div
+                          key={gRec.id}
+                          className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B2748]/70 text-xs space-y-1.5"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`px-2.5 py-0.5 rounded-md border font-black text-[11px] ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                              <strong className="text-slate-900 dark:text-white">
+                                {getNotificationTypeLabel(gRec.notificationType)} — {gRec.incidentTitle}
+                              </strong>
+                            </div>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              تاريخ الواقعة: {gRec.incidentDate}
                             </span>
                           </div>
-                        </div>
-                        <p className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200/70 dark:border-slate-800 text-[11px]">
-                          {log.messageBody}
-                        </p>
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
-                          <span>المُرسل: <strong>{log.sentByName}</strong></span>
-                          {log.violationId && (
-                            <span className="text-amber-700 font-bold">مرتبط بواقعة مخالفة مسجلة</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                            <span>
+                              المستلم: <strong>{gRec.guardianName}</strong> ({gRec.guardianRelation}) —{' '}
+                              <span className="font-mono">{gRec.recipientEmail || 'بدون بريد'}</span>
+                            </span>
+                            <span>الموظف المعتمد: {gRec.approvedByName}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
+                            <span>{badge.subtitle}</span>
+                            {gRec.gmailMessageId && (
+                              <span className="font-mono text-emerald-700 dark:text-emerald-300 font-bold">
+                                Gmail ID: {gRec.gmailMessageId}
+                              </span>
+                            )}
+                          </div>
+                          {(gRec.failureReason || gRec.uncertainReason) && (
+                            <div className="text-[11px] text-rose-600 dark:text-rose-300 font-bold">
+                              التفاصيل: {gRec.failureReason || gRec.uncertainReason}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
+              </div>
+
+              {/* Detailed Unified Table of All WhatsApp & Email Messages Sent to the Student (Linked by Immutable Student Number) */}
+              <div className="space-y-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0C2340] shadow-xs space-y-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-[#006D77] dark:text-[#D4AF37]" />
+                        <h5 className="text-sm font-black text-slate-900 dark:text-white">
+                          جدول سجل التواصل التفصيلي للرسائل المرسلة (واتساب وبريد إلكتروني)
+                        </h5>
+                        <span className="px-2.5 py-0.5 rounded-lg bg-[#0C2340] text-[#D4AF37] border border-[#D4AF37]/40 text-[11px] font-mono font-bold">
+                          الرقم الطلابي الثابت: {student.studentNumber || student.id}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        يوثّق هذا الجدول جميع الرسائل المرسلة لولي أمر الطالب بالاعتماد على الرقم الطلابي الثابت ({student.studentNumber || student.id}) مع حالتها المعتمدة وتاريخ الإجراء واسم الموظف المسؤول.
+                      </p>
+                    </div>
+
+                    {/* Summary Counters */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                        <span className="text-slate-500 dark:text-slate-400 text-[10px] block">إجمالي الرسائل</span>
+                        <strong className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                          {studentMessageLogs.length}
+                        </strong>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+                        <span className="text-emerald-700 dark:text-emerald-300 text-[10px] block">واتساب</span>
+                        <strong className="font-mono font-black text-emerald-800 dark:text-emerald-200 text-sm">
+                          {studentMessageLogs.filter((l) => l.channel === 'whatsapp').length}
+                        </strong>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60">
+                        <span className="text-sky-700 dark:text-sky-300 text-[10px] block">بريد إلكتروني</span>
+                        <strong className="font-mono font-black text-sky-800 dark:text-sky-200 text-sm">
+                          {studentMessageLogs.filter((l) => l.channel === 'email').length}
+                        </strong>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60">
+                        <span className="text-teal-700 dark:text-teal-300 text-[10px] block">أكد الموظف الإرسال</span>
+                        <strong className="font-mono font-black text-teal-800 dark:text-teal-200 text-sm">
+                          {
+                            studentMessageLogs.filter(
+                              (l) => resolveCommunicationStatusMeta(l).code === 'confirmed_sent'
+                            ).length
+                          }
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter Bar */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                        تصفية حسب القناة:
+                      </label>
+                      <select
+                        value={commChannelFilter}
+                        onChange={(e) => setCommChannelFilter(e.target.value as 'all' | 'whatsapp' | 'email')}
+                        className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold"
+                      >
+                        <option value="all">جميع القنوات (واتساب + بريد إلكتروني)</option>
+                        <option value="whatsapp">واتساب فقط (WhatsApp)</option>
+                        <option value="email">البريد الإلكتروني فقط (Email)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                        تصفية حسب الحالة الحالية:
+                      </label>
+                      <select
+                        value={commStatusFilter}
+                        onChange={(e) => setCommStatusFilter(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold"
+                      >
+                        <option value="all">جميع الحالات المعتمدة</option>
+                        <option value="draft">مسودة</option>
+                        <option value="ready">جاهزة للإرسال</option>
+                        <option value="whatsapp_opened">تم فتح واتساب</option>
+                        <option value="email_opened">تم فتح البريد</option>
+                        <option value="confirmed_sent">أكد الموظف الإرسال</option>
+                        <option value="failed">فشل أو تعذر الفتح</option>
+                        <option value="cancelled">ملغاة</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">
+                        بحث في القالب أو الموظف أو نص الرسالة:
+                      </label>
+                      <input
+                        type="text"
+                        value={commSearchQuery}
+                        onChange={(e) => setCommSearchQuery(e.target.value)}
+                        placeholder="ابحث باسم الموظف، القالب، أو نص الرسالة..."
+                        className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Detailed Messages Table */}
+                  {filteredStudentMessageLogs.length === 0 ? (
+                    <div className="py-10 px-4 text-center bg-slate-50/70 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                      <MessageSquare className="w-8 h-8 text-slate-400 mx-auto" />
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        لا توجد رسائل مطابقة مسجلة للرقم الطلابي ({student.studentNumber || student.id}) حالياً.
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        تُحفظ جميع الرسائل المرسلة من «مركز التواصل الذكي مع أولياء الأمور» تلقائياً في هذا الجدول بالاعتماد على الرقم الطلابي الثابت.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                      <table className="w-full text-right border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#0C2340] text-white text-[11px] font-bold border-b border-slate-700">
+                            <th className="py-3 px-3 whitespace-nowrap"># / الرقم الطلابي الثابت</th>
+                            <th className="py-3 px-3 whitespace-nowrap">القناة</th>
+                            <th className="py-3 px-3 whitespace-nowrap">نوع الرسالة / القالب والواقعة</th>
+                            <th className="py-3 px-3 whitespace-nowrap">ولي الأمر المستلم</th>
+                            <th className="py-3 px-3 whitespace-nowrap">الحالة الحالية</th>
+                            <th className="py-3 px-3 whitespace-nowrap">تاريخ ووقت الإجراء</th>
+                            <th className="py-3 px-3 whitespace-nowrap">اسم الموظف المسؤول</th>
+                            <th className="py-3 px-3 whitespace-nowrap text-center">التفاصيل والإجراء</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                          {filteredStudentMessageLogs.map((log, index) => {
+                            const statusMeta = resolveCommunicationStatusMeta(log);
+                            const actionTimestamp = log.confirmedAt || log.openedAt || log.createdAt;
+                            const formattedActionDate = actionTimestamp
+                              ? new Date(actionTimestamp).toLocaleString('ar-AE', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'غير محدد';
+                            const formattedCreatedDate = log.createdAt
+                              ? new Date(log.createdAt).toLocaleString('ar-AE', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '—';
+                            const staffName =
+                              log.createdByName || log.sentByName || log.createdBy || 'المرشد الأكاديمي والمهني';
+                            const categoryKey = String(log.templateCategory || log.category || 'custom');
+                            const categoryLabel =
+                              MESSAGE_CATEGORY_LABELS_AR[categoryKey] ||
+                              CATEGORY_LABELS[categoryKey as keyof typeof CATEGORY_LABELS] ||
+                              'إشعار ولي أمر';
+                            const templateDisplayTitle =
+                              log.templateName || log.templateTitle || log.subject || categoryLabel;
+                            const contactDestination =
+                              log.recipientAddress ||
+                              (log.channel === 'email'
+                                ? log.recipientEmailFull || log.recipientEmailMasked
+                                : log.recipientPhoneFull || log.recipientPhoneMasked) ||
+                              '—';
+                            const linkedIncidentRef =
+                              log.incidentId || log.violationId || log.absenceId || log.tardinessId;
+                            const isExpanded = expandedMessageLogId === log.id;
+
+                            return (
+                              <React.Fragment key={log.id || `${log.messageId}-${index}`}>
+                                <tr className="hover:bg-slate-50/90 dark:hover:bg-slate-800/50 transition-colors align-top">
+                                  {/* 1. Student Number & Reference */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="font-mono font-black text-[#0C2340] dark:text-[#D4AF37] text-xs">
+                                        {log.studentNumber || student.studentNumber || student.id}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-slate-400">
+                                        #{(log.messageId || log.id || '').slice(-6)}
+                                      </span>
+                                      {log.isTestMode && (
+                                        <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold w-fit">
+                                          وضع الاختبار الآمن
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* 2. Channel */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    {log.channel === 'whatsapp' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[11px]">
+                                        <MessageSquare className="w-3 h-3" />
+                                        <span>واتساب</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800 font-bold text-[11px]">
+                                        <Mail className="w-3 h-3" />
+                                        <span>بريد إلكتروني</span>
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* 3. Message Type / Template & Linked Incident */}
+                                  <td className="py-3 px-3 min-w-[190px]">
+                                    <div className="space-y-1">
+                                      <strong className="text-slate-900 dark:text-white block text-xs">
+                                        {templateDisplayTitle}
+                                      </strong>
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
+                                          {categoryLabel}
+                                        </span>
+                                        {linkedIncidentRef && (
+                                          <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-mono">
+                                            واقعة: #{String(linkedIncidentRef).slice(-6)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {log.violationDescription && (
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                          {log.violationDescription}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* 4. Recipient Guardian */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    <div className="space-y-0.5">
+                                      <strong className="text-slate-800 dark:text-slate-200 block">
+                                        {log.recipientName || student.parentName || 'ولي الأمر'}
+                                      </strong>
+                                      <span className="text-[10px] text-slate-500 block">
+                                        الصلة: {log.recipientRelation || log.recipientRole || student.parentRelation || 'ولي الأمر'}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-slate-600 dark:text-slate-400 block" dir="ltr">
+                                        {contactDestination}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* 5. Current Status */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    <div className="flex flex-col gap-1 items-start">
+                                      <span
+                                        className={`px-2.5 py-1 rounded-lg border font-black text-[11px] ${statusMeta.badgeClass}`}
+                                      >
+                                        {statusMeta.labelAr}
+                                      </span>
+                                      {log.retryCount && log.retryCount > 0 ? (
+                                        <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">
+                                          إعادة محاولة ({log.retryCount})
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </td>
+
+                                  {/* 6. Action Date & Timestamps */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    <div className="space-y-0.5 font-mono text-[11px]">
+                                      <div className="font-bold text-slate-900 dark:text-white">
+                                        {formattedActionDate}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500">
+                                        إنشاء: {formattedCreatedDate}
+                                      </div>
+                                      {log.confirmedAt && (
+                                        <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">
+                                          تأكيد: {new Date(log.confirmedAt).toLocaleTimeString('ar-AE', { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* 7. Responsible Staff Member */}
+                                  <td className="py-3 px-3 whitespace-nowrap">
+                                    <div className="space-y-0.5">
+                                      <strong className="text-slate-900 dark:text-white block text-xs">
+                                        {staffName}
+                                      </strong>
+                                      {log.senderRole && (
+                                        <span className="text-[10px] text-slate-500 block">
+                                          {log.senderRole}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* 8. Actions (View Message Body / Confirm Sent) */}
+                                  <td className="py-3 px-3 whitespace-nowrap text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedMessageLogId(isExpanded ? null : log.id)
+                                        }
+                                        className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer transition-colors"
+                                      >
+                                        {isExpanded ? 'إخفاء النص' : 'عرض النص'}
+                                      </button>
+
+                                      {statusMeta.canConfirmSent && (
+                                        <button
+                                          type="button"
+                                          disabled={confirmingLogId === log.id}
+                                          onClick={() => handleConfirmStudentMessageSent(log)}
+                                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[11px] cursor-pointer transition-colors shadow-2xs"
+                                          title="تأكيد إتمام إرسال الرسالة من قبل الموظف"
+                                        >
+                                          {confirmingLogId === log.id ? 'جارٍ التأكيد...' : 'تأكيد الإرسال'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {/* Expandable Row for Full Message Text Snapshot & Audit Details */}
+                                {isExpanded && (
+                                  <tr className="bg-slate-50/90 dark:bg-slate-800/40">
+                                    <td colSpan={8} className="p-4 border-t border-slate-200 dark:border-slate-800">
+                                      <div className="space-y-2.5 text-xs">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <strong className="text-[#0C2340] dark:text-[#D4AF37]">
+                                            النص الكامل للرسالة الموثقة في سجل الطالب (الرقم الطلابي: {log.studentNumber || student.studentNumber}):
+                                          </strong>
+                                          {log.subject && (
+                                            <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                                              عنوان الرسالة: <strong>{log.subject}</strong>
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 whitespace-pre-wrap leading-relaxed text-slate-800 dark:text-slate-200 text-xs">
+                                          {log.messageSnapshot || log.messageBody || 'لا يتوفر نص محفوظ للرسالة.'}
+                                        </div>
+                                        <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500 pt-1">
+                                          <span>
+                                            معرّف السجل: <code className="font-mono">{log.id}</code>
+                                          </span>
+                                          {log.approvedAction && (
+                                            <span>
+                                              الإجراء المعتمد: <strong>{log.approvedAction}</strong>
+                                            </span>
+                                          )}
+                                          {log.requiredGuardianAction && (
+                                            <span>
+                                              المطلوب من ولي الأمر: <strong>{log.requiredGuardianAction}</strong>
+                                            </span>
+                                          )}
+                                          {log.notes && (
+                                            <span>
+                                              ملاحظات الإجراء: <strong>{log.notes}</strong>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2778,6 +3516,132 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
           onClose={() => setPrintingOfficialDoc(null)}
           document={printingOfficialDoc}
         />
+      )}
+
+      {/* Full Violation Incident Details Modal */}
+      {selectedViolationDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in"
+          dir="rtl"
+        >
+          <div className="bg-white dark:bg-[#0C2340] rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl max-w-2xl w-full overflow-hidden text-right">
+            <div className="bg-[#0B2748] text-white p-4 px-5 flex items-center justify-between border-b-2 border-[#C9A227]">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-[#C9A227]" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-black">التفاصيل الكاملة للواقعة السلوكية الموثقة</h3>
+                  <p className="text-[11px] text-slate-300">
+                    {schoolSettings.schoolName} • الرقم الطلابي: {student.studentNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedViolationDetail(null)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">اسم الطالب</span>
+                  <strong className="font-bold text-slate-900 dark:text-white">{student.fullName}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">الصف والشعبة</span>
+                  <strong className="font-bold text-slate-900 dark:text-white">
+                    {student.grade} / شعبة {student.section} ({student.track || 'عام'})
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">تاريخ ووقت الواقعة</span>
+                  <strong className="font-mono font-bold text-slate-900 dark:text-white">
+                    {selectedViolationDetail.incidentDateTime || selectedViolationDetail.createdAt}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="space-y-2 p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={`px-2.5 py-0.5 rounded-md font-bold border ${getDegreeBadge(selectedViolationDetail.violationDegree)}`}>
+                    {selectedViolationDetail.violationDegree}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-md font-bold border ${getStatusBadge(selectedViolationDetail.status)}`}>
+                    حالة الاعتماد: {selectedViolationDetail.status}
+                  </span>
+                </div>
+                <h4 className="text-sm font-black text-slate-900 dark:text-white pt-1">
+                  {selectedViolationDetail.violationType}
+                </h4>
+                {selectedViolationDetail.violationsList && selectedViolationDetail.violationsList.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">بنود ورموز المخالفة وفق اللائحة المعتمدة:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedViolationDetail.violationsList.map((cl, i) => (
+                        <span key={i} className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-[11px]">
+                          رمز ({cl.code}): {cl.title} — {cl.degree} {cl.deductionMarks ? `(حسم ${cl.deductionMarks} درجات)` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-300 block">تفاصيل الواقعة والملاحظات الموثقة:</span>
+                <p className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 leading-relaxed">
+                  {selectedViolationDetail.incidentDescription || 'تم توثيق الواقعة وفق لائحة الانضباط السلوكي المعتمدة في الأكاديمية.'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900">
+                  <span className="text-[10px] text-teal-700 dark:text-teal-400 font-bold block mb-0.5">الإجراء التربوي المتخذ / المقترح:</span>
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {selectedViolationDetail.suggestedAction || 'تطبيق الإجراء المعتمد في اللائحة'}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900">
+                  <span className="text-[10px] text-rose-700 dark:text-rose-400 font-bold block mb-0.5">حسم درجات السلوك المعتمد:</span>
+                  <p className="font-black text-rose-700 dark:text-rose-300">
+                    {selectedViolationDetail.totalDeductionMarks && selectedViolationDetail.totalDeductionMarks > 0
+                      ? `حسم (${selectedViolationDetail.totalDeductionMarks}) درجات من رصيد السلوك`
+                      : 'تنبيه وتوجيه تربوي (بدون حسم درجات)'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block">مكان الواقعة:</span>
+                  <strong className="text-slate-800 dark:text-slate-200">{selectedViolationDetail.incidentLocation || 'الحرم المدرسي'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">المُبلّغ عن الواقعة:</span>
+                  <strong className="text-slate-800 dark:text-slate-200">{selectedViolationDetail.reportingPerson || 'الكادر المدرسي'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">الموظف المسؤول عن التوثيق:</span>
+                  <strong className="text-slate-800 dark:text-slate-200">{selectedViolationDetail.recordedBy || 'المرشد الأكاديمي'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedViolationDetail(null)}
+                className="px-4 py-2 rounded-xl bg-[#0B2748] hover:bg-[#12395B] text-white text-xs font-bold cursor-pointer"
+              >
+                إغلاق التفاصيل
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
     </div>

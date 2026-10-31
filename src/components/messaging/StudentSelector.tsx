@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Student, StudentContact, GradeLevel, SectionName, AcademicTrack } from '../../types';
 import { getStudentNormalizedContacts } from '../../utils/phoneUtils';
+import { extractDynamicGrades, gradesMatch } from '../../utils/gradeUtils';
 
 export type RecipientTargetType = 'primaryGuardian' | 'father' | 'mother' | 'student' | 'allContacts';
 
@@ -54,11 +55,13 @@ export const StudentSelector: React.FC<StudentSelectorProps> = ({
   const [trackFilter, setTrackFilter] = useState<string>('all');
   const [specialFilter, setSpecialFilter] = useState<string>('all');
 
+  const availableGrades = useMemo(() => extractDynamicGrades(students), [students]);
+
   // Dynamic available sections based on students data
   const availableSections = useMemo(() => {
     const set = new Set<string>();
     students.forEach((s) => {
-      if (gradeFilter === 'all' || s.grade === gradeFilter) {
+      if (gradeFilter === 'all' || gradesMatch(s.grade, gradeFilter)) {
         if (trackFilter === 'all' || (s.track || 'عام') === trackFilter) {
           if (s.section) set.add(String(s.section));
         }
@@ -79,19 +82,9 @@ export const StudentSelector: React.FC<StudentSelectorProps> = ({
         if (!matchName && !matchNum && !matchParent) return false;
       }
 
-      // Grade
+      // Grade (supports all grades dynamically from Grade 5 to 12)
       if (gradeFilter !== 'all') {
-        const match =
-          s.grade === gradeFilter ||
-          (gradeFilter === '9' && s.grade === 'تاسع') ||
-          (gradeFilter === '10' && s.grade === 'عاشر') ||
-          (gradeFilter === '11' && s.grade === 'حادي عشر') ||
-          (gradeFilter === '12' && s.grade === 'ثاني عشر') ||
-          (gradeFilter === 'تاسع' && (s.grade as string) === '9') ||
-          (gradeFilter === 'عاشر' && (s.grade as string) === '10') ||
-          (gradeFilter === 'حادي عشر' && (s.grade as string) === '11') ||
-          (gradeFilter === 'ثاني عشر' && (s.grade as string) === '12');
-        if (!match) return false;
+        if (!gradesMatch(s.grade, gradeFilter)) return false;
       }
 
       // Section
@@ -254,17 +247,21 @@ export const StudentSelector: React.FC<StudentSelectorProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {/* Grade Filter */}
+          {/* Grade Filter (Dynamic from DB: Grade 5 to 12) */}
           <select
             value={gradeFilter}
-            onChange={(e) => setGradeFilter(e.target.value)}
+            onChange={(e) => {
+              setGradeFilter(e.target.value);
+              setSectionFilter('all');
+            }}
             className="px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-hidden"
           >
-            <option value="all">جميع الصفوف</option>
-            <option value="تاسع">الصف تاسع (9)</option>
-            <option value="عاشر">الصف عاشر (10)</option>
-            <option value="حادي عشر">الصف حادي عشر (11)</option>
-            <option value="ثاني عشر">الصف ثاني عشر (12)</option>
+            <option value="all">جميع الصفوف ({availableGrades.length})</option>
+            {availableGrades.map((g) => (
+              <option key={g} value={g}>
+                الصف {g}
+              </option>
+            ))}
           </select>
 
           {/* Section Filter */}

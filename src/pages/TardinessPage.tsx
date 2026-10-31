@@ -65,7 +65,11 @@ import {
 } from '../utils/bylawsRules';
 import { useSchoolSettings } from '../context/SchoolSettingsContext';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { useAcademicFiltering } from '../hooks/useAcademicFiltering';
+import {
+  useAcademicFiltering,
+  getGradeDisplayLabel,
+  getGradeCycleSubtitle,
+} from '../hooks/useAcademicFiltering';
 
 interface TardinessPageProps {
   students: Student[];
@@ -194,9 +198,19 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
   const [showBroadcastConfirmModal, setShowBroadcastConfirmModal] = useState(false);
   const [broadcastMessageDraft, setBroadcastMessageDraft] = useState('');
 
+  // Modal for viewing exact unique tardiness dates for a student
+  const [datesBreakdownModal, setDatesBreakdownModal] = useState<{
+    studentNumber: string;
+    studentName: string;
+    grade: string;
+    section: string;
+    dates: string[];
+  } | null>(null);
+
   // Dynamically compute filtered grades, tracks, and sections using useAcademicFiltering
   const {
     filteredGrades,
+    filteredTracks,
     filteredSections,
     generalSections,
     advancedSections,
@@ -214,6 +228,13 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
       setSelectedGrade(filteredGrades[0]);
     }
   }, [filteredGrades, selectedGrade]);
+
+  // Auto-sync selectedTrack if not in filteredTracks for the selected grade
+  useEffect(() => {
+    if (filteredTracks.length > 0 && !filteredTracks.includes(selectedTrack)) {
+      setSelectedTrack(filteredTracks[0] as AcademicTrack);
+    }
+  }, [filteredTracks, selectedTrack]);
 
   // Auto-sync selectedSection when grade or track changes if selectedSection is not in active filteredSections
   useEffect(() => {
@@ -240,10 +261,16 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
     }
   }, [tableFilteredSections, tableSectionFilter]);
 
-  // Students in selected grade, track & section
+  // Students in selected grade, track & section (with fallback to grade + section if track is custom/empty)
   const sectionStudents = useMemo(() => {
+    const exactMatch = students.filter(
+      (s) => s.grade === selectedGrade && (s.track || 'عام') === selectedTrack && s.section === selectedSection
+    );
+    if (exactMatch.length > 0) {
+      return exactMatch.sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
+    }
     return students
-      .filter((s) => s.grade === selectedGrade && (s.track || 'عام') === selectedTrack && s.section === selectedSection)
+      .filter((s) => s.grade === selectedGrade && s.section === selectedSection)
       .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
   }, [students, selectedGrade, selectedTrack, selectedSection]);
 
@@ -270,24 +297,38 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
     return set;
   }, [tardinessRecords, recordingDate]);
 
-  // Cumulative tardiness per student map (from historical records)
-  const cumulativeTardinessMap = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Cumulative tardiness per student map (calculated from UNIQUE actual tardiness dates per student)
+  const { cumulativeTardinessMap, cumulativeTardinessDatesMap } = useMemo(() => {
+    const setsMap: Record<string, Set<string>> = {};
     for (const r of tardinessRecords) {
+      const dt = String(r.date || '').trim();
+      if (!dt) continue;
       if (r.studentNumber) {
-        map[r.studentNumber] = (map[r.studentNumber] || 0) + 1;
+        if (!setsMap[r.studentNumber]) setsMap[r.studentNumber] = new Set();
+        setsMap[r.studentNumber].add(dt);
       }
-      if (r.studentId) {
-        map[r.studentId] = (map[r.studentId] || 0) + 1;
+      if (r.studentId && r.studentId !== r.studentNumber) {
+        if (!setsMap[r.studentId]) setsMap[r.studentId] = new Set();
+        setsMap[r.studentId].add(dt);
       }
     }
-    return map;
+    const countMap: Record<string, number> = {};
+    const datesMap: Record<string, string[]> = {};
+    Object.keys(setsMap).forEach((key) => {
+      const sortedDates = Array.from(setsMap[key]).sort((a, b) => b.localeCompare(a));
+      countMap[key] = sortedDates.length;
+      datesMap[key] = sortedDates;
+    });
+    return { cumulativeTardinessMap: countMap, cumulativeTardinessDatesMap: datesMap };
   }, [tardinessRecords]);
 
-  // Helper to calculate student's past tardiness count
+  // Helper to calculate student's past tardiness count from unique dates
   const getStudentTotalTardiness = (student: Student) => {
-    const past = cumulativeTardinessMap[student.studentNumber] || student.totalTardiness || 0;
-    return past;
+    return (
+      cumulativeTardinessMap[student.studentNumber] ??
+      cumulativeTardinessMap[student.id] ??
+      0
+    );
   };
 
   // Toggle student tardy status in current section
@@ -1060,7 +1101,6 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
                     type="button"
                     onClick={() => {
                       setSelectedGrade(grade);
-                      setSelectedSection('1');
                       setTardySelections({});
                     }}
                     className={`p-4 rounded-2xl border text-right transition-all cursor-pointer relative overflow-hidden ${
@@ -1070,14 +1110,14 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs opacity-75 font-semibold">الحلقة الثالثة</span>
+                      <span className="text-xs opacity-75 font-semibold">{getGradeCycleSubtitle(grade)}</span>
                       {isSelected && (
                         <span className="w-5 h-5 rounded-full bg-[#D4AF37] text-slate-950 text-[10px] flex items-center justify-center font-bold">
                           ✓
                         </span>
                       )}
                     </div>
-                    <p className="text-base sm:text-lg font-black mt-1">الصف {grade}</p>
+                    <p className="text-base sm:text-lg font-black mt-1">{getGradeDisplayLabel(grade)}</p>
                     <p className={`text-xs mt-1 font-medium ${isSelected ? 'text-teal-100' : 'text-slate-500'}`}>
                       {countInGrade} طالباً مسجلاً
                     </p>
@@ -1349,15 +1389,44 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
 
                               {/* Warning badge if student has 3 or more cumulative tardinesses */}
                               {pastTardinessCount >= 3 && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDatesBreakdownModal({
+                                      studentNumber: student.studentNumber,
+                                      studentName: student.fullName,
+                                      grade: student.grade,
+                                      section: student.section,
+                                      dates: cumulativeTardinessDatesMap[student.studentNumber] || cumulativeTardinessDatesMap[student.id] || [],
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 cursor-pointer hover:underline"
+                                  title="اضغط لعرض التواريخ الفعلية المحتسبة"
+                                >
                                   <AlertTriangle className="w-3 h-3 text-rose-600" />
-                                  <span>تنبيه: {pastTardinessCount} مرات تأخير</span>
-                                </span>
+                                  <span>تنبيه: {pastTardinessCount} أيام تأخير</span>
+                                </button>
                               )}
                             </div>
 
                             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                              ولي الأمر: {student.parentName} ({student.parentPhone}) • رصيد التأخير المسجل: {pastTardinessCount}
+                              ولي الأمر: {student.parentName} ({student.parentPhone}) •{' '}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDatesBreakdownModal({
+                                    studentNumber: student.studentNumber,
+                                    studentName: student.fullName,
+                                    grade: student.grade,
+                                    section: student.section,
+                                    dates: cumulativeTardinessDatesMap[student.studentNumber] || cumulativeTardinessDatesMap[student.id] || [],
+                                  })
+                                }
+                                className="font-bold text-[#006D77] dark:text-teal-400 hover:underline cursor-pointer"
+                                title="اضغط لعرض التواريخ المحتسبة في الرصيد التراكمي"
+                              >
+                                رصيد التأخير الفعلي المسجل: {pastTardinessCount} أيام
+                              </button>
                             </p>
                           </div>
                         </div>
@@ -1887,8 +1956,19 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
                             </span>
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDatesBreakdownModal({
+                                  studentNumber: r.studentNumber,
+                                  studentName: r.studentName,
+                                  grade: r.grade,
+                                  section: r.section,
+                                  dates: cumulativeTardinessDatesMap[r.studentNumber] || cumulativeTardinessDatesMap[r.studentId] || [r.date],
+                                })
+                              }
+                              title="اضغط لعرض التواريخ الفعلية المحتسبة في الرصيد التراكمي"
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black cursor-pointer hover:underline ${
                                 isCritical
                                   ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
                                   : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
@@ -1896,7 +1976,7 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
                             >
                               {totalTardy} أيام
                               {isCritical && <AlertTriangle className="w-3 h-3 text-rose-600" />}
-                            </span>
+                            </button>
                           </td>
                           <td className="py-3 px-3 whitespace-nowrap">
                             <span
@@ -2749,6 +2829,78 @@ export const TardinessPage: React.FC<TardinessPageProps> = ({
         }}
         onCancel={() => setRecordToDelete(null)}
       />
+
+      {/* Modal: Unique Tardiness Dates Breakdown */}
+      {datesBreakdownModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0C2340] w-full max-w-md rounded-2xl border-2 border-[#C9A227] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-[#0B2748] text-white px-5 py-4 flex items-center justify-between border-b border-[#C9A227]/40">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#C9A227]" />
+                <div>
+                  <h3 className="text-sm font-black">تواريخ التأخير المحتسبة في الرصيد</h3>
+                  <p className="text-[11px] text-slate-300">
+                    {datesBreakdownModal.studentName} (#{datesBreakdownModal.studentNumber})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDatesBreakdownModal(null)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[65vh] overflow-y-auto">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-900 dark:text-amber-200">
+                  إجمالي الأيام الفعلية المحتسبة (بدون تكرار لليوم):
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-[#0B2748] text-[#C9A227] font-mono font-black">
+                  {datesBreakdownModal.dates.length} أيام
+                </span>
+              </div>
+              {datesBreakdownModal.dates.length === 0 ? (
+                <p className="text-center text-xs text-slate-500 py-6">لا توجد تواريخ تأخير مسجلة.</p>
+              ) : (
+                <div className="space-y-2">
+                  {datesBreakdownModal.dates.map((dt, idx) => (
+                    <div
+                      key={dt}
+                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <span className="font-bold text-slate-600 dark:text-slate-400">اليوم #{idx + 1}</span>
+                      <span className="font-mono font-black text-slate-900 dark:text-white">{dt}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const sNum = datesBreakdownModal.studentNumber;
+                  setDatesBreakdownModal(null);
+                  const found = students.find((s) => s.studentNumber === sNum || s.id === sNum);
+                  if (found) onOpenStudentProfile(found.id);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#0B2748] text-[#C9A227] font-bold text-xs cursor-pointer"
+              >
+                فتح ملف الطالب الموحد
+              </button>
+              <button
+                type="button"
+                onClick={() => setDatesBreakdownModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

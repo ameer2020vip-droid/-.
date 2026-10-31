@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, UserPlus, AlertCircle } from 'lucide-react';
 import { GradeLevel, SectionName, AcademicTrack, Student } from '../types';
 import { useSchoolSettings } from '../context/SchoolSettingsContext';
+import {
+  ACADEMY_STANDARD_GRADES,
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+} from '../hooks/useAcademicFiltering';
 
 interface AddStudentModalProps {
   isOpen: boolean;
@@ -21,13 +27,21 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
   const { schoolSettings } = useSchoolSettings();
   const [studentNumber, setStudentNumber] = useState('');
   const [fullName, setFullName] = useState('');
-  const [grade, setGrade] = useState<GradeLevel>('تاسع');
+  const [grade, setGrade] = useState<GradeLevel>('خامس');
   const [section, setSection] = useState<SectionName>('1');
   const [track, setTrack] = useState<AcademicTrack>('عام');
   const [parentName, setParentName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
   const [parentRelation, setParentRelation] = useState('الأب');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const availableGrades = useMemo(() => {
+    const set = new Set<string>(ACADEMY_STANDARD_GRADES);
+    existingStudents.forEach((s) => {
+      if (s.grade && s.grade !== 'غير محدد') set.add(s.grade);
+    });
+    return Array.from(set).sort(compareGrades);
+  }, [existingStudents]);
 
   if (!isOpen) return null;
 
@@ -148,10 +162,11 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 onChange={(e) => setGrade(e.target.value as GradeLevel)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#006D77]"
               >
-                <option value="تاسع">تاسع</option>
-                <option value="عاشر">عاشر</option>
-                <option value="حادي عشر">حادي عشر</option>
-                <option value="ثاني عشر">ثاني عشر</option>
+                {availableGrades.map((g) => (
+                  <option key={g} value={g}>
+                    {getGradeDisplayLabel(g)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -162,9 +177,9 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 onChange={(e) => setSection(e.target.value as SectionName)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#006D77]"
               >
-                {Array.from(new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', ...existingStudents.map((s) => String(s.section || ''))]))
+                {Array.from(new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'أ', 'ب', 'ج', 'A', 'B', ...existingStudents.map((s) => String(s.section || ''))]))
                   .filter(Boolean)
-                  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+                  .sort(compareSections)
                   .map((sec) => (
                     <option key={sec} value={sec}>
                       شعبة {sec}
@@ -182,6 +197,9 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
               >
                 <option value="عام">عام</option>
                 <option value="متقدم">متقدم</option>
+                <option value="نخبة">نخبة</option>
+                <option value="تطبيقي">تطبيقي</option>
+                <option value="بدون مسار">بدون مسار</option>
               </select>
             </div>
           </div>

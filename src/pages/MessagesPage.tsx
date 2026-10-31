@@ -47,6 +47,8 @@ import {
   StudentContact,
   MessageCategory,
   ViolationRecord,
+  AbsenceRecord,
+  TardinessRecord,
   QueueItem,
 } from '../types';
 import { DEFAULT_MESSAGE_TEMPLATES } from '../data/defaultMessageTemplates';
@@ -84,10 +86,16 @@ import {
   maskPhone,
   maskEmail,
 } from '../utils/phoneUtils';
+import { GmailOAuthIntegrationPanel } from '../components/GmailOAuthIntegrationPanel';
+import { isAuthorizedGmailAdmin } from '../firebase/gmailNotificationService';
+import { CommunicationSubPage } from '../components/Navigation';
+import { SmartParentCommunicationHub } from '../components/messaging/SmartParentCommunicationHub';
 
 interface MessagesPageProps {
   students: Student[];
   violations?: ViolationRecord[];
+  absences?: AbsenceRecord[];
+  tardinessRecords?: TardinessRecord[];
   schoolId: string;
   currentUser?: {
     uid: string;
@@ -98,6 +106,13 @@ interface MessagesPageProps {
   initialStudentId?: string | null;
   initialSelectedStudentIds?: string[];
   initialSelectedViolationIds?: string[];
+  initialSubPage?: CommunicationSubPage;
+  initialIncident?: {
+    type: 'absence' | 'tardiness' | 'violation';
+    id: string;
+    studentId: string;
+    date?: string;
+  } | null;
   onClearInitialViolations?: () => void;
   onOpenStudentProfile?: (studentId: string) => void;
   queueItems?: QueueItem[];
@@ -129,17 +144,55 @@ const MESSAGE_TYPE_BUTTONS: { id: MessageCategory | 'all'; label: string; icon: 
 export const MessagesPage: React.FC<MessagesPageProps> = ({
   students,
   violations = [],
+  absences = [],
+  tardinessRecords = [],
   schoolId,
   currentUser,
   initialStudentId,
   initialSelectedStudentIds,
   initialSelectedViolationIds,
+  initialSubPage,
+  initialIncident,
   onClearInitialViolations,
   onOpenStudentProfile,
   queueItems: queueItemsProp,
   onQueueItemsChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'create' | 'templates' | 'logs'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'templates' | 'logs' | 'gmail-auto'>('create');
+  const [commSubPage, setCommSubPage] = useState<CommunicationSubPage>(() => {
+    if (initialSubPage) return initialSubPage;
+    if (initialIncident || initialStudentId) return 'new-message';
+    if (initialSelectedViolationIds && initialSelectedViolationIds.length > 0) return 'behavior-notices';
+    return 'dashboard';
+  });
+  const [showLegacyStudio, setShowLegacyStudio] = useState<boolean>(false);
+
+  // Sync with Sidebar sub-page clicks
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<CommunicationSubPage>).detail;
+      if (detail) {
+        setCommSubPage(detail);
+        setShowLegacyStudio(false);
+      }
+    };
+    window.addEventListener('fujairah:comm-subpage', handler);
+    return () => window.removeEventListener('fujairah:comm-subpage', handler);
+  }, []);
+
+  const handleChangeCommSubPage = (sub: CommunicationSubPage) => {
+    setCommSubPage(sub);
+    setShowLegacyStudio(false);
+    window.dispatchEvent(new CustomEvent('fujairah:comm-subpage-changed', { detail: sub }));
+  };
+
+  useEffect(() => {
+    if (initialIncident || initialStudentId) {
+      handleChangeCommSubPage('new-message');
+    }
+  }, [initialIncident, initialStudentId]);
+
+  const isGmailAdmin = isAuthorizedGmailAdmin(currentUser);
   const [composerMode, setComposerMode] = useState<'studio' | 'wizard'>('studio');
   const [currentStep, setCurrentStep] = useState<number>(1);
 
@@ -149,7 +202,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
   const [templates, setTemplates] = useState<MessageTemplate[]>(DEFAULT_MESSAGE_TEMPLATES);
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate>(
     () =>
-      DEFAULT_MESSAGE_TEMPLATES.find((t) => t.id === 'tpl-official-violation-notice') ||
+      DEFAULT_MESSAGE_TEMPLATES.find((t) => t.id === 'tpl-fujairah-absence') ||
       DEFAULT_MESSAGE_TEMPLATES[0]
   );
   const [selectedCategory, setSelectedCategory] = useState<MessageCategory | 'all'>('all');
@@ -157,16 +210,16 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
   const [settings, setSettings] = useState<SchoolMessageSettings>({
     schoolId,
     schoolNameAr: schoolSettings.schoolName || 'أكاديمية الفجيرة العلمية الإسلامية',
-    schoolNameEn: schoolSettings.schoolNameEn || 'Fujairah Scientific Islamic Academy',
+    schoolNameEn: schoolSettings.schoolNameEn || 'Fujairah Islamic Scientific Academy',
     schoolNumber: schoolSettings.schoolNumber || '7001',
     emirate: schoolSettings.emirate || 'الفجيرة',
-    cycle: schoolSettings.schoolCycle || 'جميع المراحل الدراسية – الحلقة الثالثة (9 - 12)',
+    cycle: schoolSettings.schoolCycle || 'جميع المراحل الدراسية (5 - 12)',
     academicYear: schoolSettings.academicYear || '2026–2027',
     semester: schoolSettings.currentTerm || 'الفصل الدراسي الأول',
     defaultSenderName: currentUser?.displayName || schoolSettings.counselorName || 'أمير علي عبدالشاكر بكري',
     defaultSenderRole: 'المرشد الأكاديمي والمهني - مكتب الإرشاد الطلابي',
     phone: schoolSettings.phone || '09-2220000',
-    email: schoolSettings.email || 'info@fsia.edu.ae',
+    email: schoolSettings.email || 'mohamedadelfujaca@gmail.com',
     whatsappEnabled: true,
     emailEnabled: true,
     autoGreeting: 'السلام عليكم ورحمة الله وبركاته، تحية طيبة وبعد،،',
@@ -973,14 +1026,14 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-black text-white">
-                مركز مراسلات أولياء الأمور وإدارة القوالب
+                مركز التواصل الذكي مع أولياء الأمور
               </h1>
               <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#C9A227]/20 text-[#C9A227] border border-[#C9A227]/40">
                 أكاديمية الفجيرة العلمية الإسلامية
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              إرسال إشعارات واتساب فردية ومجمعة لأولياء الأمور، تخصيص القوالب المحفوظة في Firestore، وتوثيق التواصل تلقائياً في ملف الطالب
+              نظام متكامل للتواصل التربوي عبر واتساب الرسمي والبريد الإلكتروني، مرتبط بملف الطالب وسجلات الغياب والتأخير والسلوك
             </p>
           </div>
         </div>
@@ -1008,6 +1061,105 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* SMART PARENT COMMUNICATION HUB (9 Official Sub-pages) */}
+      {!showLegacyStudio ? (
+        <SmartParentCommunicationHub
+          activeSubPage={commSubPage}
+          onSubPageChange={handleChangeCommSubPage}
+          students={students}
+          violations={violations}
+          absences={absences}
+          tardinessRecords={tardinessRecords}
+          templates={templates}
+          logs={logs}
+          onLogsChange={setLogs}
+          settings={settings}
+          onOpenSettingsModal={() => setIsSettingsOpen(true)}
+          schoolId={schoolId}
+          currentUser={currentUser}
+          onOpenStudentProfile={onOpenStudentProfile}
+          onOpenLegacyStudio={() => setShowLegacyStudio(true)}
+          initialStudentId={initialStudentId}
+          initialIncident={initialIncident}
+          onOpenBulkWhatsAppQueue={(items, tpl, ch) => {
+            setSelectedTemplate(tpl);
+            setChannel(ch);
+            updateQueueItems(items);
+            setIsQueueOpen(true);
+          }}
+          onRenderTemplatesManager={() => (
+            <TemplateManagementManager
+              templates={templates}
+              settings={settings}
+              sampleStudent={selectedStudent || students[0] || null}
+              currentUserName={currentUser?.displayName || settings.defaultSenderName || 'أمير علي عبدالشاكر بكري'}
+              currentUserId={currentUser?.uid || 'counselor'}
+              canManage={canManageTemplates}
+              onSaveTemplate={async (tpl, changeNote, skipRevision) => {
+                const saved = await saveMessageTemplate(schoolId, tpl, {
+                  uid: currentUser?.uid || 'counselor',
+                  name: currentUser?.displayName || settings.defaultSenderName || 'أمير علي عبدالشاكر بكري',
+                  changeNote,
+                  skipRevision,
+                });
+                setTemplates((prev) =>
+                  prev.some((t) => t.id === saved.id)
+                    ? prev.map((t) => (t.id === saved.id ? saved : t))
+                    : [saved, ...prev]
+                );
+                showToast(`تم حفظ القالب «${saved.name}» في Cloud Firestore بنجاح.`);
+              }}
+              onDeleteTemplate={async (templateId) => {
+                await deleteMessageTemplate(schoolId, templateId);
+                setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+                showToast('تم حذف القالب المخصص بنجاح.');
+              }}
+              onSetDefaultForCategory={async (templateId, category) => {
+                const updatedList = await setDefaultTemplateForCategory(
+                  schoolId,
+                  templateId,
+                  category,
+                  templates,
+                  currentUser?.displayName || settings.defaultSenderName
+                );
+                setTemplates(updatedList);
+                showToast('تم تعيين القالب الافتراضي لهذا النوع من المراسلات.');
+              }}
+              onUseTemplateForSending={(tpl) => {
+                setSelectedTemplate(tpl);
+                handleChangeCommSubPage('new-message');
+                showToast(`تم اختيار القالب «${tpl.name}» للإرسال.`);
+              }}
+            />
+          )}
+          onRenderGmailOAuthPanel={() =>
+            isGmailAdmin ? (
+              <GmailOAuthIntegrationPanel
+                schoolId={schoolId}
+                currentUser={currentUser as any}
+                students={students}
+                violations={violations}
+                onOpenStudentProfile={onOpenStudentProfile}
+                onShowToast={(msg) => showToast(msg)}
+              />
+            ) : null
+          }
+        />
+      ) : (
+        <>
+          <div className="flex items-center justify-between bg-teal-50 dark:bg-teal-950/50 border border-[#006D77] rounded-2xl p-3 text-xs">
+            <span className="font-bold text-slate-800 dark:text-slate-200">
+              أنت الآن في وضع «الاستوديو المتقدم للنماذج». يمكنك العودة إلى الأقسام الـ 9 لمركز التواصل الذكي في أي وقت.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowLegacyStudio(false)}
+              className="px-3.5 py-1.5 rounded-xl bg-[#006D77] text-white font-black text-xs cursor-pointer"
+            >
+              العودة إلى مركز التواصل الذكي (9 وحدات)
+            </button>
+          </div>
 
       {/* Main Navigation Bar (Create / Template Management / Logs) */}
       <div className="bg-white dark:bg-[#0C2340] rounded-2xl p-2.5 border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1050,6 +1202,21 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
             <History className="w-3.5 h-3.5" />
             <span>سجل المراسلات الموثقة ({logs.length})</span>
           </button>
+
+          {isGmailAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('gmail-auto')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                activeTab === 'gmail-auto'
+                  ? 'bg-[#0B2748] text-[#C9A227] border border-[#C9A227] shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5 text-[#C9A227]" />
+              <span>ربط Gmail التلقائي والإشعارات الفاشلة</span>
+            </button>
+          )}
         </div>
 
         {activeTab === 'create' && (
@@ -2269,6 +2436,20 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ADMIN-ONLY TAB: GMAIL OAUTH 2.0, AUTOMATED QUEUE, FAILED NOTIFICATIONS & RETRY */}
+      {activeTab === 'gmail-auto' && isGmailAdmin && (
+        <GmailOAuthIntegrationPanel
+          schoolId={schoolId}
+          currentUser={currentUser as any}
+          students={students}
+          violations={violations}
+          onOpenStudentProfile={onOpenStudentProfile}
+          onShowToast={(msg) => showToast(msg)}
+        />
+      )}
+        </>
       )}
 
       {/* Modal for Editing a Single Student's Message Without Affecting Others */}

@@ -68,7 +68,6 @@ export const StudentOverviewTab: React.FC<StudentOverviewTabProps> = ({
       case 'warning':
       case 'parent_notice':
       case 'parent_summon':
-      case 'violation_report':
       case 'temporary_suspension':
       case 'attendance_commitment':
       case 'authorized_pickup':

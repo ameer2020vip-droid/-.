@@ -14,6 +14,12 @@ import {
 } from 'lucide-react';
 import { Student, AcademicTrack, GradeLevel, SectionName, TrackAuditLog } from '../types';
 import { getTrackAuditLogs } from '../storage';
+import {
+  ACADEMY_STANDARD_GRADES,
+  compareGrades,
+  compareSections,
+  getGradeDisplayLabel,
+} from '../hooks/useAcademicFiltering';
 
 interface TrackCorrectionModalProps {
   isOpen: boolean;
@@ -54,6 +60,24 @@ export const TrackCorrectionModal: React.FC<TrackCorrectionModalProps> = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+
+  const dynamicGrades = useMemo(() => {
+    const gSet = new Set<string>();
+    students.forEach((s) => {
+      if (s.grade) gSet.add(s.grade);
+    });
+    return gSet.size > 0 ? Array.from(gSet).sort(compareGrades) : [...ACADEMY_STANDARD_GRADES];
+  }, [students]);
+
+  const dynamicSections = useMemo(() => {
+    const sSet = new Set<string>();
+    students.forEach((s) => {
+      if (selectedGrade === 'all' || s.grade === selectedGrade) {
+        if (s.section) sSet.add(String(s.section));
+      }
+    });
+    return Array.from(sSet).sort(compareSections);
+  }, [students, selectedGrade]);
 
   if (!isOpen) return null;
 
@@ -351,14 +375,18 @@ export const TrackCorrectionModal: React.FC<TrackCorrectionModalProps> = ({
               <div>
                 <select
                   value={selectedGrade}
-                  onChange={(e) => setSelectedGrade(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedGrade(e.target.value);
+                    setSelectedSection('all');
+                  }}
                   className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold"
                 >
                   <option value="all">جميع الصفوف</option>
-                  <option value="تاسع">الصف تاسع</option>
-                  <option value="عاشر">الصف عاشر</option>
-                  <option value="حادي عشر">الصف حادي عشر</option>
-                  <option value="ثاني عشر">الصف ثاني عشر</option>
+                  {dynamicGrades.map((g) => (
+                    <option key={g} value={g}>
+                      {getGradeDisplayLabel(g)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -370,10 +398,11 @@ export const TrackCorrectionModal: React.FC<TrackCorrectionModalProps> = ({
                   className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold"
                 >
                   <option value="all">جميع الشعب</option>
-                  <option value="1">شعبة 1</option>
-                  <option value="2">شعبة 2</option>
-                  <option value="3">شعبة 3</option>
-                  <option value="4">شعبة 4</option>
+                  {dynamicSections.map((sec) => (
+                    <option key={sec} value={sec}>
+                      شعبة {sec}
+                    </option>
+                  ))}
                 </select>
               </div>
 

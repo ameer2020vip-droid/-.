@@ -29,7 +29,7 @@ export const DEFAULT_MASTER_SCHOOL_SETTINGS: SchoolSettings = {
   schoolName: OFFICIAL_ACADEMY_NAME_AR,
   schoolNameEn: OFFICIAL_ACADEMY_NAME_EN,
   schoolNumber: '7001',
-  schoolLogo: '',
+  schoolLogo: '/assets/aistudio/image_3c0494bc.png',
   emirate: 'الفجيرة',
   schoolCycle: 'جميع المراحل الدراسية – الحلقة الثالثة (الصفوف 9 - 12)',
   schoolGender: 'بنين وبنات',
@@ -108,6 +108,7 @@ export const SchoolSettingsProvider: React.FC<{ children: React.ReactNode }> = (
           ...parsed,
           schoolName: sanitizeSchoolNameAr(parsed.schoolName),
           schoolNameEn: sanitizeSchoolNameEn(parsed.schoolNameEn),
+          schoolLogo: parsed.schoolLogo || DEFAULT_MASTER_SCHOOL_SETTINGS.schoolLogo,
           emirate: parsed.emirate === 'الشارقة' ? 'الفجيرة' : (parsed.emirate || 'الفجيرة'),
           email: parsed.email?.includes('alkhalil') ? 'info@fsia.edu.ae' : (parsed.email || 'info@fsia.edu.ae'),
         };

@@ -703,8 +703,12 @@ export const AcademyPortalPage: React.FC<AcademyPortalPageProps> = ({
               className="flex items-center gap-3 cursor-pointer group"
             >
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#C9A227] to-[#A67C00] p-0.5 shadow-md shrink-0">
-                <div className="w-full h-full bg-[#0B2748] rounded-[14px] flex items-center justify-center text-[#C9A227] group-hover:scale-105 transition-transform">
-                  <GraduationCap className="w-7 h-7" />
+                <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center overflow-hidden p-0.5 group-hover:scale-105 transition-transform">
+                  <img
+                    src="/assets/aistudio/image_3c0494bc.png"
+                    alt="شعار أكاديمية الفجيرة العلمية الإسلامية"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
               </div>
               <div>
