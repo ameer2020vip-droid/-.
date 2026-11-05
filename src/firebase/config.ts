@@ -16,7 +16,7 @@ interface FirebaseConfigOptions {
   firestoreDatabaseId?: string;
 }
 
-export const targetDatabaseId = appletConfig.firestoreDatabaseId || 'ai-studio-7049e193-0b31-400e-a46c-4163cfd4f315';
+export const targetDatabaseId = (appletConfig as any).firestoreDatabaseId || 'ai-studio-7049e193-0b31-400e-a46c-4163cfd4f315';
 
 function isValidApiKey(key?: string): boolean {
   if (!key) return false;
@@ -34,7 +34,7 @@ export function getFirebaseConfig(): FirebaseConfigOptions | null {
       storageBucket: appletConfig.storageBucket,
       messagingSenderId: appletConfig.messagingSenderId,
       appId: appletConfig.appId,
-      firestoreDatabaseId: appletConfig.firestoreDatabaseId || targetDatabaseId,
+      firestoreDatabaseId: (appletConfig as any).firestoreDatabaseId || targetDatabaseId,
     };
   }
 

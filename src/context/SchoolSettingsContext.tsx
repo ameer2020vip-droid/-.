@@ -32,7 +32,7 @@ export const DEFAULT_MASTER_SCHOOL_SETTINGS: SchoolSettings = {
   schoolLogo: '/assets/aistudio/image_3c0494bc.png',
   emirate: 'الفجيرة',
   schoolCycle: 'جميع المراحل الدراسية – الحلقة الثالثة (الصفوف 9 - 12)',
-  schoolGender: 'بنين وبنات',
+  schoolGender: 'مشترك',
   academicYear: '2026–2027',
   currentTerm: 'الفصل الدراسي الأول',
   phone: '09-2220000',

@@ -1620,7 +1620,7 @@ export const StudentsPage: React.FC<StudentsPageProps> = ({
                                 </span>
                                 {dayRec && (
                                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    وقت الوصول: {dayRec.arrivalTime || dayRec.time || 'غير محدد'} • الإجراء: {dayRec.actionTaken || dayRec.suggestedAction || 'تنبيه'}
+                                    وقت الوصول: {(dayRec as any).arrivalTime || dayRec.time || 'غير محدد'} • الإجراء: {(dayRec as any).actionTaken || dayRec.suggestedAction || 'تنبيه'}
                                   </span>
                                 )}
                               </div>

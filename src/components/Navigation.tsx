@@ -25,6 +25,7 @@ import {
   Send,
   FileText,
   History,
+  CheckSquare,
 } from 'lucide-react';
 import { DashboardStats, UserRole } from '../types';
 import { useCustomLabels } from '../context/CustomLabelsContext';
@@ -46,6 +47,7 @@ export type NavTab =
   | 'violations'
   | 'warning-form'
   | 'messages'
+  | 'workspace'
   | 'users'
   | 'settings';
 
@@ -279,6 +281,15 @@ export const Navigation: React.FC<NavigationProps> = ({
       isHighlight: true,
       badge: safeUnconfirmedMessages > 0 ? safeUnconfirmedMessages : 'ذكي',
       badgeColor: 'bg-[#C9A227] text-[#0B2748] font-black',
+    },
+    {
+      id: 'workspace',
+      group: 'Google Workspace',
+      label: 'مهام Google Tasks و Gmail',
+      icon: CheckSquare,
+      isHighlight: true,
+      badge: 'جديد',
+      badgeColor: 'bg-[#006D77] text-[#D4AF37] font-black border border-[#D4AF37]/30',
     },
     {
       id: 'employees',

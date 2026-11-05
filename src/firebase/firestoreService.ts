@@ -69,6 +69,22 @@ export function resolveCanonicalSchoolId(schoolId?: string): string {
   return schoolId;
 }
 
+export function stripUndefinedDeep(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(stripUndefinedDeep);
+  if (typeof obj === 'object') {
+    const res: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val !== undefined) {
+        res[key] = stripUndefinedDeep(val);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
 function isOfflineError(err: any): boolean {
   if (!err) return false;
   const msg = String(err.message || '').toLowerCase();
@@ -3519,8 +3535,8 @@ export async function auditSchoolDataIntegrity(
         studentId: v.studentId || '',
         studentNumber: v.studentNumber || '',
         studentName: v.studentName || '',
-        date: v.date || '',
-        violationName: v.violationName || '',
+        date: (v as any).date || v.incidentDateTime || '',
+        violationName: (v as any).violationName || v.violationType || v.incidentDescription || '',
         matchedStudentByNameOrId: matched
           ? {
               studentNumber: matched.studentNumber || matched.id,

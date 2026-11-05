@@ -41,6 +41,7 @@ import {
   Student,
   MessageTemplate,
   MessageLogRecord,
+  MessageStatus,
   SchoolMessageSettings,
   MessageChannel,
   StudentContact,
@@ -48,7 +49,6 @@ import {
   AbsenceRecord,
   TardinessRecord,
   QueueItem,
-  MessageDeliveryStatus,
 } from '../../types';
 import {
   CommunicationSubPage,
@@ -440,7 +440,7 @@ export const SmartParentCommunicationHub: React.FC<SmartParentCommunicationHubPr
     }
 
     const nowIso = new Date().toISOString();
-    const status: MessageDeliveryStatus =
+    const status: MessageStatus =
       channel === 'whatsapp' ? 'whatsapp_opened' : 'email_opened';
     const dedupeKey = computeMessageDedupeKey({
       schoolId,
@@ -671,13 +671,20 @@ export const SmartParentCommunicationHub: React.FC<SmartParentCommunicationHubPr
 
     for (const st of bulkRawTargetStudents) {
       const contacts = getStudentNormalizedContacts(st);
-      const primary = contacts.find((c) => c.isPrimaryGuardian) || contacts[0] || {
+      const primary: StudentContact = contacts.find((c) => c.isPrimary) || contacts[0] || {
         id: `fallback-${st.id}`,
         name: st.parentName || 'ولي الأمر',
         relation: st.guardianRelation || 'ولي الأمر',
         phone: st.parentPhone || '',
+        phoneE164: st.parentPhone || '',
         email: st.parentEmail || '',
-        isPrimaryGuardian: true,
+        isPrimary: true,
+        hasWhatsApp: true,
+        whatsappConsent: true,
+        emailConsent: true,
+        isVerified: false,
+        source: 'manual',
+        updatedAt: new Date().toISOString(),
       };
       const normPhone = normalizeUaePhone(primary.phone || st.parentPhone || '', st.nationality);
       const email = (primary.email || st.parentEmail || st.fatherEmail || st.motherEmail || '').trim();
@@ -947,7 +954,7 @@ export const SmartParentCommunicationHub: React.FC<SmartParentCommunicationHubPr
   };
 
   // Status badge helper (Never uses «تم التسليم»!)
-  const getStatusBadgeStyle = (status: MessageDeliveryStatus | string) => {
+  const getStatusBadgeStyle = (status: MessageStatus | string) => {
     switch (status) {
       case 'confirmed_sent':
         return 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800';
@@ -2343,7 +2350,6 @@ export const SmartParentCommunicationHub: React.FC<SmartParentCommunicationHubPr
                   }
                   const sampleBody = bulkRecipientEntries[0]?.renderedBody || bulkBodyMessageText;
                   const bccLink = buildBccMailtoLink(
-                    settings.email || 'mohamedadelfujaca@gmail.com',
                     validEmails,
                     bulkSubjectText,
                     sampleBody

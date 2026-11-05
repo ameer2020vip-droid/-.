@@ -573,7 +573,8 @@ export type TimelineEventType =
   | 'attendance_commitment'
   | 'authorized_pickup'
   | 'signature' 
-  | 'action';
+  | 'action'
+  | 'counseling';
 
 export interface TimelineEvent {
   id: string;
@@ -2484,6 +2485,7 @@ export interface CounselorTaskRecord {
   priority: 'عادية' | 'عاجلة' | 'طارئة';
   dueDate: string;                 // YYYY-MM-DD
   studentId?: string;
+  studentNumber?: string;
   studentName?: string;
   grade?: string;
   section?: string;
@@ -2670,7 +2672,9 @@ export type CounselorNotificationType =
   | 'warning_form_draft'
   | 'warning_form_approval'
   | 'new_infraction'
-  | 'follow_up_due';
+  | 'infraction_logged'
+  | 'follow_up_due'
+  | 'followup_due';
 
 export interface CounselorNotification {
   id: string;
@@ -2686,6 +2690,8 @@ export interface CounselorNotification {
   formTab?: string;
   violationId?: string;
   targetTab?: string;
+  targetRecordId?: string;
+  acknowledged?: boolean;
   createdAt: string;
   timestamp: number;
   isUrgent?: boolean;

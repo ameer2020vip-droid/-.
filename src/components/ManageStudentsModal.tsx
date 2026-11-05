@@ -147,8 +147,7 @@ export const ManageStudentsModal: React.FC<ManageStudentsModalProps> = ({
       await onRefreshData?.();
       const updatedReport = await auditSchoolDataIntegrity(schoolId, normalizeCanonicalGrade);
       setAuditReport(updatedReport);
-      setConfirmRepairChecked(false);
-      const msg = `تم إصلاح ومزامنة (${res.repairedGradesCount}) صف دراسي، وربط (${res.repairedTardinessLinksCount}) سجل تأخير، وربط (${res.repairedViolationLinksCount}) مخالفة، وتحديث (${res.repairedCountersCount}) رصيد تراكمي بنجاح.`;
+      const msg = `تم إصلاح ومزامنة (${res.repairedGrades}) صف دراسي، وربط (${res.repairedTardinessLinks}) سجل تأخير، وربط (${res.repairedViolationLinks}) مخالفة، وتحديث (${res.updatedCounters}) رصيد تراكمي بنجاح.`;
       setRepairResultMessage(msg);
       onShowToast?.(msg, 'success');
     } catch (err: any) {

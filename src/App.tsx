@@ -139,6 +139,7 @@ import { UserSettingsModal } from './components/UserSettingsModal';
 import { SchoolSettingsModal } from './components/SchoolSettingsModal';
 import { CounselorNotificationBanner } from './components/CounselorNotificationBanner';
 import { AcademyPortalPage } from './pages/AcademyPortalPage';
+import { GoogleWorkspaceHub } from './components/workspace/GoogleWorkspaceHub';
 import { useCustomLabels } from './context/CustomLabelsContext';
 import { useSchoolSettings } from './context/SchoolSettingsContext';
 import { Loader2, AlertCircle, ArrowUp, GraduationCap } from 'lucide-react';
@@ -2145,6 +2146,16 @@ export default function App() {
                     onOpenStudentProfile={(id) => setActiveProfileStudentId(id)}
                     queueItems={messageQueue}
                     onQueueItemsChange={setMessageQueue}
+                  />
+                )}
+
+                {/* TAB: GOOGLE WORKSPACE (GOOGLE TASKS & GMAIL) */}
+                {currentTab === 'workspace' && (
+                  <GoogleWorkspaceHub
+                    students={students}
+                    violations={violations}
+                    tardinessRecords={tardinessRecords}
+                    onOpenStudentProfile={(id) => setActiveProfileStudentId(id)}
                   />
                 )}
 

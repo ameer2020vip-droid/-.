@@ -88,6 +88,7 @@ import {
 } from '../utils/phoneUtils';
 import { GmailOAuthIntegrationPanel } from '../components/GmailOAuthIntegrationPanel';
 import { isAuthorizedGmailAdmin } from '../firebase/gmailNotificationService';
+import { GoogleWorkspaceHub } from '../components/workspace/GoogleWorkspaceHub';
 import { CommunicationSubPage } from '../components/Navigation';
 import { SmartParentCommunicationHub } from '../components/messaging/SmartParentCommunicationHub';
 
@@ -158,7 +159,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
   queueItems: queueItemsProp,
   onQueueItemsChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'create' | 'templates' | 'logs' | 'gmail-auto'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'templates' | 'logs' | 'gmail-auto' | 'workspace'>('create');
   const [commSubPage, setCommSubPage] = useState<CommunicationSubPage>(() => {
     if (initialSubPage) return initialSubPage;
     if (initialIncident || initialStudentId) return 'new-message';
@@ -1217,6 +1218,19 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
               <span>ربط Gmail التلقائي والإشعارات الفاشلة</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('workspace')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'workspace'
+                ? 'bg-[#006D77] text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span>Google Tasks & Gmail</span>
+          </button>
         </div>
 
         {activeTab === 'create' && (
@@ -2448,6 +2462,18 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
           onOpenStudentProfile={onOpenStudentProfile}
           onShowToast={(msg) => showToast(msg)}
         />
+      )}
+
+      {/* GOOGLE WORKSPACE TAB: GOOGLE TASKS & GMAIL */}
+      {activeTab === 'workspace' && (
+        <div className="bg-white dark:bg-[#0C2340] rounded-3xl p-6 border border-slate-200/90 dark:border-slate-800 shadow-xs">
+          <GoogleWorkspaceHub
+            students={students}
+            violations={violations}
+            tardinessRecords={tardinessRecords}
+            onOpenStudentProfile={onOpenStudentProfile}
+          />
+        </div>
       )}
         </>
       )}

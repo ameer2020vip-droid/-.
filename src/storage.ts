@@ -1693,7 +1693,10 @@ export function getStudentTimeline(
   for (const c of allCases) {
     // Separate shareable professional summary from strictly confidential notes
     const isRestrictedConfidential =
-      c.confidentialityLevel === 'سري جداً' || c.confidentialityLevel === 'حماية طفل';
+      (c.confidentialityLevel as string) === 'سري جدًا' ||
+      (c.confidentialityLevel as string) === 'سري جداً' ||
+      (c.confidentialityLevel as string) === 'حماية طفل' ||
+      c.confidentialityLevel === 'مقيّد';
     const safeDescription = isRestrictedConfidential
       ? `ملف إرشادي مقيد السرية (${c.confidentialityLevel}) • الصف والشعبة وقت التسجيل: ${c.grade}/${c.section} • الحالة: ${c.status} (الملاحظات التفصيلية محجوبة لغير المخولين)`
       : `نوع الحالة: ${c.caseType} (${c.subcategory || 'عام'}) • الصف والشعبة وقت التسجيل: ${c.grade}/${c.section} • الحالة: ${c.status}`;
@@ -4851,8 +4854,11 @@ export function syncStudentFollowUpNotifications(
               studentName: task.studentName,
               studentNumber: task.studentNumber,
               gradeSection: task.grade ? `الصف ${task.grade} / ${task.section || ''}` : undefined,
-              targetTab: 'cases',
-              isUrgent: task.priority === 'urgent' || task.priority === 'high',
+              isUrgent:
+                task.priority === 'عاجلة' ||
+                task.priority === 'طارئة' ||
+                (task.priority as any) === 'urgent' ||
+                (task.priority as any) === 'high',
             });
           }
         }
